@@ -1,0 +1,60 @@
+[package]
+name = "flowgentra-ai-py"
+version = version = "0.2.3"
+
+edition = "2021"
+authors = ["Oussama Ben Hariz"]
+license = "MIT"
+description = "Python bindings for FlowgentraAI - build AI agents with graphs"
+
+[lib]
+name = "flowgentra_ai"
+crate-type = ["cdylib"]
+
+[features]
+default = ["sqlite", "postgres", "mysql", "mssql", "mongodb-store", "redis-store", "neo4j-store"]
+sqlite = []
+postgres = []
+mysql = []
+mssql = []
+mongodb-store = []
+redis-store = []
+neo4j-store = []
+
+[dependencies]
+flowgentra-ai = { version = "0.2.3", features = [
+    "sqlite", "postgres", "mysql", "mssql",
+    "mongodb-store", "redis-store", "neo4j-store", "cassandra-store", "elasticsearch-store",
+    "pgvector-store", "redis-vector", "elasticsearch-vector",
+    "opensearch-store", "upstash-store", "astra-db-store", "mongodb-atlas-store",
+    "bigquery-sql", "databricks-sql",
+    "pinecone", "qdrant", "chroma", "milvus", "weaviate",
+] }
+
+# PyO3 for Python bindings
+pyo3 = { version = "0.22", features = ["extension-module", "multiple-pymethods"] }
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Async trait (for Node impl)
+async-trait = "0.1"
+
+# Serialization (shared with main crate)
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_yml = "0.0.12"
+
+# UUID generation (used in checkpointer.rs)
+uuid = { version = "1", features = ["v4"] }
+
+# .env file loading (api key fallback)
+dotenv = "0.15"
+
+# HTTP client (used by MultiQueryRetriever and web retriever bindings)
+reqwest = { version = "0.12", features = ["json"] }
+
+# Pin unicode-segmentation to 1.12 — heck v0.4.1 (transitive via sqlx v0.7 and
+# mongodb) references the now-private `UnicodeWords` struct from v1.13+.
+unicode-segmentation = "=1.12.0"
+
+

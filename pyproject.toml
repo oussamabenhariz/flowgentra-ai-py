@@ -1,0 +1,29 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "flowgentra-ai"
+version = "0.2.3"
+description = "Python bindings for FlowgentraAI - build AI agents with graphs"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Oussama Ben Hariz" }]
+homepage = "https://github.com/oussamabenhariz/flowgentra-ai"
+repository = "https://github.com/oussamabenhariz/flowgentra-ai"
+documentation = "https://docs.rs/flowgentra-ai"
+keywords = ["ai", "agent", "llm", "graph", "workflow"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "flowgentra_ai._native"
