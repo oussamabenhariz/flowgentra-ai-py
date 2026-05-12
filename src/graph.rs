@@ -6,6 +6,7 @@
 //! graph.invoke({...}) accepts and returns plain Python dicts.
 
 use pyo3::prelude::*;
+use pyo3::exceptions::PyKeyError;
 use crate::error::ValidationError;
 use pyo3::types::PyDict;
 use std::collections::{HashMap, HashSet};

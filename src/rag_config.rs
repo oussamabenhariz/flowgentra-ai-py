@@ -78,7 +78,7 @@ impl PyRAGConfig {
     #[pyo3(signature = (embedding_dim=1536))]
     fn memory(embedding_dim: usize) -> PyResult<Self> {
         let config = flowgentra_ai::core::rag::RAGConfig::memory(embedding_dim)
-            .map_err(|e| pyo3::exceptions::crate::error::ConfigurationError::new_err(format!("{}", e)))?;
+            .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
         Ok(PyRAGConfig { inner: config })
     }
 
@@ -87,7 +87,7 @@ impl PyRAGConfig {
     #[pyo3(signature = (endpoint="http://localhost:8000"))]
     fn chroma(endpoint: &str) -> PyResult<Self> {
         let config = flowgentra_ai::core::rag::RAGConfig::chroma(endpoint)
-            .map_err(|e| pyo3::exceptions::crate::error::ConfigurationError::new_err(format!("{}", e)))?;
+            .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
         Ok(PyRAGConfig { inner: config })
     }
 
@@ -95,7 +95,7 @@ impl PyRAGConfig {
     #[staticmethod]
     fn pinecone(index: &str, api_key: &str) -> PyResult<Self> {
         let config = flowgentra_ai::core::rag::RAGConfig::pinecone(index, api_key)
-            .map_err(|e| pyo3::exceptions::crate::error::ConfigurationError::new_err(format!("{}", e)))?;
+            .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
         Ok(PyRAGConfig { inner: config })
     }
 
@@ -104,7 +104,7 @@ impl PyRAGConfig {
     #[pyo3(signature = (endpoint, collection, embedding_dim=1536))]
     fn qdrant(endpoint: &str, collection: &str, embedding_dim: usize) -> PyResult<Self> {
         let config = flowgentra_ai::core::rag::RAGConfig::qdrant(endpoint, collection, embedding_dim)
-            .map_err(|e| pyo3::exceptions::crate::error::ConfigurationError::new_err(format!("{}", e)))?;
+            .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
         Ok(PyRAGConfig { inner: config })
     }
 
@@ -112,7 +112,7 @@ impl PyRAGConfig {
     #[staticmethod]
     fn weaviate(endpoint: &str) -> PyResult<Self> {
         let config = flowgentra_ai::core::rag::RAGConfig::weaviate(endpoint)
-            .map_err(|e| pyo3::exceptions::crate::error::ConfigurationError::new_err(format!("{}", e)))?;
+            .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
         Ok(PyRAGConfig { inner: config })
     }
 
@@ -121,7 +121,7 @@ impl PyRAGConfig {
     #[pyo3(signature = (endpoint, collection, embedding_dim=1536))]
     fn milvus(endpoint: &str, collection: &str, embedding_dim: usize) -> PyResult<Self> {
         let config = flowgentra_ai::core::rag::RAGConfig::milvus(endpoint, collection, embedding_dim)
-            .map_err(|e| pyo3::exceptions::crate::error::ConfigurationError::new_err(format!("{}", e)))?;
+            .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
         Ok(PyRAGConfig { inner: config })
     }
 

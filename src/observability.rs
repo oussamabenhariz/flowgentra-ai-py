@@ -56,7 +56,7 @@ impl PyExecutionTrace {
     fn to_json(&self) -> PyResult<String> {
         self.inner
             .to_json()
-            .map_err(|e| pyo3::exceptions::crate::error::InternalError::new_err(format!("{}", e)))
+            .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))
     }
 
     /// Deserialize from JSON.
@@ -138,7 +138,7 @@ impl PyExecutionTracer {
     fn get_events_json(&self) -> PyResult<String> {
         self.inner
             .to_json()
-            .map_err(|e| pyo3::exceptions::crate::error::InternalError::new_err(format!("{}", e)))
+            .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))
     }
 
     /// Clear all recorded events.

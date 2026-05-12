@@ -27,7 +27,7 @@ impl PyHumanInputTool {
 
     fn definition(&self, py: Python<'_>) -> PyResult<PyObject> {
         let val = serde_json::to_value(&self.inner.definition())
-            .map_err(|e| pyo3::exceptions::crate::error::ToolExecutionError::new_err(e.to_string()))?;
+            .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
         json_to_py(py, &val)
     }
 

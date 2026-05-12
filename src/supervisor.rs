@@ -803,7 +803,7 @@ impl PySupervisor {
                     }));
                 }
                 None => {
-                    return Err(pyo3::exceptions::crate::error::AgentExecutionError::new_err(format!(
+                    return Err(crate::error::AgentExecutionError::new_err(format!(
                         "Supervisor internal error: child '{}' was not found in the agents \
                          registry after pre-flight validation. This is a bug — please report it.",
                         child_name

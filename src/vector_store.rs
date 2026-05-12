@@ -238,14 +238,14 @@ impl PyEmbeddings {
     /// Generate embedding for a single text.
     fn embed(&self, text: &str) -> PyResult<Vec<f32>> {
         crate::run_async(self.inner.embed(text))
-            .map_err(|e| pyo3::exceptions::crate::error::InternalError::new_err(format!("{}", e)))
+            .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))
     }
 
     /// Generate embeddings for multiple texts (batch).
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
         crate::run_async(self.inner.embed_batch(refs))
-            .map_err(|e| pyo3::exceptions::crate::error::InternalError::new_err(format!("{}", e)))
+            .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))
     }
 
     /// Get embedding dimension.
@@ -342,7 +342,7 @@ impl PyInMemoryVectorStore {
                         }
                     }
                 } else {
-                    return Err(pyo3::exceptions::crate::error::InternalError::new_err(
+                    return Err(crate::error::InternalError::new_err(
                         "Failed to generate embeddings for documents",
                     ));
                 }
