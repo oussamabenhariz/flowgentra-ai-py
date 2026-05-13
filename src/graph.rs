@@ -19,6 +19,8 @@ use flowgentra_ai::core::state_graph::{
     node::Node,
     FileCheckpointer,
 };
+use flowgentra_ai::core::middleware::Middleware;
+use flowgentra_ai::core::observability::events::EventBroadcaster;
 
 use flowgentra_ai::core::observability::visualization::ExecutionTracer;
 
@@ -470,6 +472,8 @@ pub struct PyStateGraphBuilder {
     interrupt_after: Vec<String>,
     subgraphs: Vec<(String, Arc<StateGraph<DynState>>)>,
     checkpointer_path: Option<String>,
+    middleware: Vec<Arc<dyn Middleware<DynState>>>,
+    broadcaster: Option<Arc<EventBroadcaster>>,
 }
 
 #[pymethods]
@@ -511,6 +515,8 @@ impl PyStateGraphBuilder {
             interrupt_after: Vec::new(),
             subgraphs: Vec::new(),
             checkpointer_path: None,
+            middleware: Vec::new(),
+            broadcaster: None,
         })
     }
 
@@ -763,6 +769,68 @@ impl PyStateGraphBuilder {
         Ok(())
     }
 
+    /// Attach an EventBroadcaster so the compiled graph emits execution events.
+    ///
+    /// Subscribe from the broadcaster before invoking the graph to receive
+    /// node-start/complete/failed, edge-traversed, and LLM-streaming events.
+    ///
+    /// Example:
+    ///     bc = EventBroadcaster()
+    ///     rx = bc.subscribe()
+    ///     builder.set_broadcaster(bc)
+    ///     graph = builder.compile()
+    ///     graph.invoke({...})
+    ///     for event in rx.drain():
+    ///         print(event["type"])
+    fn set_broadcaster(&mut self, broadcaster: &crate::observability::PyEventBroadcaster) {
+        self.broadcaster = Some(broadcaster.inner.clone());
+    }
+
+    /// Add middleware to the graph execution pipeline.
+    ///
+    /// Middleware intercepts each node execution. Supported types:
+    /// - LoggingMiddleware — logs node start/end via tracing
+    /// - MetricsMiddleware — collects per-node timing and error counts
+    /// - Any Python object with before_node(node_name, state) and/or
+    ///   after_node(node_name, state) methods that return "continue", "skip",
+    ///   or "abort:<reason>".
+    ///
+    /// Example — built-in:
+    ///     mw = LoggingMiddleware(verbose=True)
+    ///     builder.use_middleware(mw)
+    ///
+    /// Example — custom Python class:
+    ///     class MyMW:
+    ///         def before_node(self, node_name, state):
+    ///             print(f"entering {node_name}")
+    ///             return "continue"
+    ///     builder.use_middleware(MyMW())
+    fn use_middleware(&mut self, mw: &Bound<'_, PyAny>) -> PyResult<()> {
+        let arc: Arc<dyn Middleware<DynState>> =
+            if let Ok(logging) = mw.extract::<PyRef<crate::middleware::PyLoggingMiddleware>>() {
+                logging.as_dyn()
+            } else if let Ok(metrics) = mw.extract::<PyRef<crate::middleware::PyMetricsMiddleware>>() {
+                metrics.as_dyn()
+            } else if mw.hasattr("before_node")? || mw.hasattr("after_node")? {
+                let name = mw
+                    .getattr("__class__")
+                    .and_then(|c| c.getattr("__name__"))
+                    .and_then(|n| n.extract::<String>())
+                    .ok();
+                Arc::new(crate::middleware::PyObjectMiddleware::new(
+                    mw.clone().unbind(),
+                    name,
+                ))
+            } else {
+                return Err(crate::error::ValidationError::new_err(
+                    "use_middleware: expected LoggingMiddleware, MetricsMiddleware, \
+                     or an object with before_node / after_node methods",
+                ));
+            };
+        self.middleware.push(arc);
+        Ok(())
+    }
+
     /// Compile the builder into a runnable CompiledGraph.
     ///
     /// Args:
@@ -851,6 +919,14 @@ impl PyStateGraphBuilder {
                 crate::error::InternalError::new_err(format!("Failed to create checkpointer: {}", e))
             })?;
             builder = builder.set_checkpointer(Arc::new(cp));
+        }
+
+        for mw in &self.middleware {
+            builder = builder.use_middleware(mw.clone());
+        }
+
+        if let Some(ref bc) = self.broadcaster {
+            builder = builder.set_broadcaster(bc.clone());
         }
 
         let graph = builder
@@ -980,6 +1056,19 @@ impl PyCompiledGraph {
         let result = py.allow_threads(|| crate::run_async(fut))
             .map_err(sg_err_to_py)?;
         self.state_to_output_dict(py, &result)
+    }
+
+    /// Subscribe to execution events emitted during graph.invoke().
+    ///
+    /// Returns an EventReceiver whose drain() / try_recv() can be polled
+    /// after invoke() completes to inspect what happened.
+    ///
+    /// Note: subscribe BEFORE calling invoke() — events emitted during invoke
+    /// are only received by subscribers that were registered beforehand.
+    fn subscribe_events(&self) -> crate::observability::PyEventReceiver {
+        crate::observability::PyEventReceiver {
+            inner: Some(self.inner.subscribe()),
+        }
     }
 
     /// Get the list of node names in this graph.

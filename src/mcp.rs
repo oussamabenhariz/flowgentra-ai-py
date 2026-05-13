@@ -7,6 +7,9 @@ use std::sync::Arc;
 use flowgentra_ai::core::mcp::{
     MCPAuth, MCPClient, MCPConfig, MCPConnectionSettings, MCPConnectionType, MCPPromptArgument,
     MCPResource, MCPResourceContent, MCPTool, MCPClientFactory,
+    StdioConnection,
+    SSEConnection, SSEMessage,
+    DockerConfig, DockerConnection, DockerConnectionBuilder,
 };
 
 use crate::error::to_py_err;
@@ -747,8 +750,413 @@ pub fn py_create_mcp_client(config: &PyMCPConfig) -> PyResult<PyMCPClient> {
 #[pyfunction(name = "merge_tool_lists")]
 pub fn py_merge_tool_lists(clients: Vec<PyRef<'_, PyMCPClient>>) -> PyResult<Vec<PyMCPTool>> {
     let arcs: Vec<Arc<dyn MCPClient>> = clients.iter().map(|c| c.inner.clone()).collect();
-    let tools = 
+    let tools =
         crate::run_async(flowgentra_ai::core::mcp::merge_tool_lists(&arcs))
         .map_err(to_py_err)?;
     Ok(tools.into_iter().map(|t| PyMCPTool { inner: t }).collect())
+}
+
+// ─── PySSEMessage ──────────────────────────────────────────────────────────
+
+/// A single SSE message received from an MCP server stream.
+#[pyclass(name = "SSEMessage")]
+#[derive(Clone)]
+pub struct PySSEMessage {
+    pub(crate) inner: SSEMessage,
+}
+
+#[pymethods]
+impl PySSEMessage {
+    #[getter]
+    fn id(&self) -> &str { &self.inner.id }
+
+    #[getter]
+    fn event_type(&self) -> &str { &self.inner.event_type }
+
+    #[getter]
+    fn data<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
+        json_to_py(py, &self.inner.data)
+    }
+
+    #[getter]
+    fn timestamp(&self) -> &str { &self.inner.timestamp }
+
+    fn __repr__(&self) -> String {
+        format!("SSEMessage(type='{}', id='{}')", self.inner.event_type, self.inner.id)
+    }
+}
+
+// ─── PySSEStreamReceiver ───────────────────────────────────────────────────
+
+/// Iterable stream of SSE messages from an MCP server connection.
+///
+/// Example:
+///     conn = SSEConnection("http://localhost:8000", timeout_secs=30)
+///     stream = conn.stream("/events", {"type": "tool_call"})
+///     for msg in stream:
+///         print(msg.event_type, msg.data)
+#[pyclass(name = "SSEStreamReceiver")]
+pub struct PySSEStreamReceiver {
+    inner: Option<flowgentra_ai::core::mcp::SSEStreamReceiver>,
+}
+
+#[pymethods]
+impl PySSEStreamReceiver {
+    #[getter]
+    fn id(&self) -> Option<&str> {
+        self.inner.as_ref().map(|s| s.id.as_str())
+    }
+
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> { slf }
+
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+        let stream = match self.inner.as_mut() {
+            Some(s) => s,
+            None => return Ok(None),
+        };
+
+        let result = match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                use tokio::runtime::RuntimeFlavor;
+                match handle.runtime_flavor() {
+                    RuntimeFlavor::CurrentThread => crate::get_runtime().block_on(stream.next()),
+                    _ => tokio::task::block_in_place(|| handle.block_on(stream.next())),
+                }
+            }
+            Err(_) => crate::get_runtime().block_on(stream.next()),
+        };
+
+        match result {
+            Some(Ok(msg)) => Ok(Some(PySSEMessage { inner: msg }.into_py(py))),
+            Some(Err(_)) | None => {
+                self.inner = None;
+                Ok(None)
+            }
+        }
+    }
+
+    /// Collect all remaining messages into a list (blocking until stream closes).
+    fn collect_all(&mut self) -> PyResult<Vec<PySSEMessage>> {
+        let stream = self.inner.take().ok_or_else(|| {
+            crate::error::InternalError::new_err("SSEStreamReceiver already consumed")
+        })?;
+        let messages = crate::run_async(stream.collect_all())
+            .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))?;
+        Ok(messages.into_iter().map(|m| PySSEMessage { inner: m }).collect())
+    }
+
+    fn __repr__(&self) -> &'static str { "SSEStreamReceiver()" }
+}
+
+// ─── PySSEConnection ───────────────────────────────────────────────────────
+
+/// SSE (Server-Sent Events) connection to an MCP server.
+///
+/// Opens HTTP streaming connections and returns SSEStreamReceiver iterables.
+///
+/// Example:
+///     conn = SSEConnection("http://localhost:8000", timeout_secs=30)
+///     print(conn.active_stream_count())
+///     conn.close_all()
+#[pyclass(name = "SSEConnection")]
+pub struct PySSEConnection {
+    inner: Arc<SSEConnection>,
+}
+
+#[pymethods]
+impl PySSEConnection {
+    /// Args:
+    ///     base_url:     Base URL of the SSE server.
+    ///     timeout_secs: Request timeout in seconds (minimum 30).
+    #[new]
+    #[pyo3(signature = (base_url, timeout_secs = 30))]
+    fn new(base_url: &str, timeout_secs: u64) -> Self {
+        PySSEConnection {
+            inner: Arc::new(SSEConnection::new(base_url.to_string(), timeout_secs)),
+        }
+    }
+
+    /// Open an SSE stream to the given endpoint and return an iterable receiver.
+    ///
+    /// Args:
+    ///     endpoint:     Relative endpoint path (e.g. "/events").
+    ///     request_body: JSON-serializable dict to send as the POST body.
+    fn stream(&self, endpoint: &str, request_body: &Bound<'_, PyAny>) -> PyResult<PySSEStreamReceiver> {
+        let body = py_to_json(request_body)?;
+        let inner = self.inner.clone();
+        let ep = endpoint.to_string();
+        let receiver = crate::run_async(async move { inner.stream(ep, body).await })
+            .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))?;
+        Ok(PySSEStreamReceiver { inner: Some(receiver) })
+    }
+
+    /// Number of currently active SSE streams.
+    fn active_stream_count(&self) -> usize {
+        crate::run_async(self.inner.active_stream_count())
+    }
+
+    /// Close all active SSE streams.
+    fn close_all(&self) {
+        crate::run_async(self.inner.close_all());
+    }
+
+    fn __repr__(&self) -> &'static str { "SSEConnection()" }
+}
+
+// ─── PyStdioConnection ─────────────────────────────────────────────────────
+
+/// Stdio connection to a local process-based MCP server.
+///
+/// Communicates over JSON-RPC via stdin/stdout.
+///
+/// Example:
+///     conn = StdioConnection("python", ["-m", "my_mcp_server"])
+///     conn.start()
+///     result = conn.call("tools/list", {})
+///     conn.stop()
+#[pyclass(name = "StdioConnection")]
+pub struct PyStdioConnection {
+    inner: Arc<StdioConnection>,
+}
+
+#[pymethods]
+impl PyStdioConnection {
+    /// Args:
+    ///     command: Executable to run.
+    ///     args:    Command-line arguments (default empty).
+    #[new]
+    #[pyo3(signature = (command, args = None))]
+    fn new(command: &str, args: Option<Vec<String>>) -> Self {
+        PyStdioConnection {
+            inner: Arc::new(StdioConnection::new(command, args.unwrap_or_default())),
+        }
+    }
+
+    /// Start the subprocess.
+    fn start(&self) -> PyResult<()> {
+        let inner = self.inner.clone();
+        crate::run_async(async move { inner.start().await }).map_err(to_py_err)
+    }
+
+    /// Stop the subprocess.
+    fn stop(&self) -> PyResult<()> {
+        let inner = self.inner.clone();
+        crate::run_async(async move { inner.stop().await }).map_err(to_py_err)
+    }
+
+    /// Send a JSON-RPC call and return the result.
+    ///
+    /// Args:
+    ///     method: JSON-RPC method name (e.g. "tools/list").
+    ///     params: Dict of parameters.
+    fn call(&self, method: &str, params: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+        let params_json = py_to_json(params)?;
+        let inner = self.inner.clone();
+        let m = method.to_string();
+        let result = crate::run_async(async move { inner.call(m, params_json).await })
+            .map_err(to_py_err)?;
+        Python::with_gil(|py| json_to_py(py, &result))
+    }
+
+    /// Return True if the subprocess is still running.
+    fn is_running(&self) -> bool {
+        let inner = self.inner.clone();
+        crate::run_async(async move { inner.is_running().await })
+    }
+
+    fn __repr__(&self) -> &'static str { "StdioConnection()" }
+}
+
+// ─── PyStdioConnectionBuilder ─────────────────────────────────────────────
+
+/// Builder for StdioConnection with fluent API.
+///
+/// Example:
+///     conn = (StdioConnectionBuilder("python")
+///         .arg("-m").arg("my_mcp_server")
+///         .env("PYTHONUNBUFFERED", "1")
+///         .timeout_secs(60)
+///         .build())
+#[pyclass(name = "StdioConnectionBuilder")]
+pub struct PyStdioConnectionBuilder {
+    command: String,
+    args: Vec<String>,
+    env_vars: std::collections::HashMap<String, String>,
+    working_dir: Option<String>,
+    timeout_secs: u64,
+    allowed_commands: Vec<String>,
+}
+
+#[pymethods]
+impl PyStdioConnectionBuilder {
+    #[new]
+    fn new(command: &str) -> Self {
+        PyStdioConnectionBuilder {
+            command: command.to_string(),
+            args: Vec::new(),
+            env_vars: std::collections::HashMap::new(),
+            working_dir: None,
+            timeout_secs: 30,
+            allowed_commands: Vec::new(),
+        }
+    }
+
+    fn arg(mut slf: PyRefMut<'_, Self>, arg: String) -> PyRefMut<'_, Self> {
+        slf.args.push(arg);
+        slf
+    }
+
+    fn args_list(mut slf: PyRefMut<'_, Self>, args: Vec<String>) -> PyRefMut<'_, Self> {
+        slf.args.extend(args);
+        slf
+    }
+
+    fn env(mut slf: PyRefMut<'_, Self>, key: String, value: String) -> PyRefMut<'_, Self> {
+        slf.env_vars.insert(key, value);
+        slf
+    }
+
+    fn working_dir(mut slf: PyRefMut<'_, Self>, dir: String) -> PyRefMut<'_, Self> {
+        slf.working_dir = Some(dir);
+        slf
+    }
+
+    fn timeout_secs(mut slf: PyRefMut<'_, Self>, secs: u64) -> PyRefMut<'_, Self> {
+        slf.timeout_secs = secs;
+        slf
+    }
+
+    fn allowed_commands(mut slf: PyRefMut<'_, Self>, commands: Vec<String>) -> PyRefMut<'_, Self> {
+        slf.allowed_commands = commands;
+        slf
+    }
+
+    fn build(&self) -> PyStdioConnection {
+        let mut conn = StdioConnection::new(self.command.clone(), self.args.clone());
+        for (k, v) in &self.env_vars {
+            conn = conn.with_env(k, v);
+        }
+        if let Some(ref dir) = self.working_dir {
+            conn = conn.with_working_dir(dir);
+        }
+        conn = conn.with_timeout(std::time::Duration::from_secs(self.timeout_secs));
+        if !self.allowed_commands.is_empty() {
+            conn = conn.with_allowed_commands(self.allowed_commands.clone());
+        }
+        PyStdioConnection { inner: Arc::new(conn) }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("StdioConnectionBuilder(command='{}')", self.command)
+    }
+}
+
+// ─── Docker types ──────────────────────────────────────────────────────────
+
+/// Container execution state.
+#[pyclass(name = "ContainerState", eq, eq_int)]
+#[derive(Clone, PartialEq)]
+pub enum PyContainerState {
+    Created,
+    Running,
+    Paused,
+    Stopped,
+    Exited,
+    Removed,
+}
+
+#[pymethods]
+impl PyContainerState {
+    fn as_str(&self) -> &str {
+        match self {
+            PyContainerState::Created => "created",
+            PyContainerState::Running => "running",
+            PyContainerState::Paused => "paused",
+            PyContainerState::Stopped => "stopped",
+            PyContainerState::Exited => "exited",
+            PyContainerState::Removed => "removed",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ContainerState.{}", self.as_str())
+    }
+}
+
+/// Docker MCP container configuration.
+#[pyclass(name = "DockerConfig")]
+#[derive(Clone)]
+pub struct PyDockerConfig {
+    inner: DockerConfig,
+}
+
+#[pymethods]
+impl PyDockerConfig {
+    #[new]
+    #[pyo3(signature = (image, container_name=None, working_dir=None, network=None))]
+    fn new(
+        image: String,
+        container_name: Option<String>,
+        working_dir: Option<String>,
+        network: Option<String>,
+    ) -> Self {
+        PyDockerConfig {
+            inner: DockerConfig {
+                image,
+                container_name,
+                working_dir,
+                network,
+                ..Default::default()
+            },
+        }
+    }
+
+    #[getter]
+    fn image(&self) -> &str { &self.inner.image }
+    #[getter]
+    fn container_name(&self) -> Option<&str> { self.inner.container_name.as_deref() }
+    #[getter]
+    fn working_dir(&self) -> Option<&str> { self.inner.working_dir.as_deref() }
+    #[getter]
+    fn network(&self) -> Option<&str> { self.inner.network.as_deref() }
+
+    fn __repr__(&self) -> String {
+        format!("DockerConfig(image='{}')", self.inner.image)
+    }
+}
+
+/// Docker MCP connection (placeholder — use MCPConfig.docker() for production).
+#[pyclass(name = "DockerConnection")]
+pub struct PyDockerConnection {
+    inner: DockerConnection,
+}
+
+#[pymethods]
+impl PyDockerConnection {
+    #[getter]
+    fn image(&self) -> &str { &self.inner.config.image }
+
+    fn __repr__(&self) -> String {
+        format!("DockerConnection(image='{}')", self.inner.config.image)
+    }
+}
+
+/// Builder for DockerConnection.
+#[pyclass(name = "DockerConnectionBuilder")]
+pub struct PyDockerConnectionBuilder {
+    image: String,
+}
+
+#[pymethods]
+impl PyDockerConnectionBuilder {
+    #[new]
+    fn new(image: &str) -> Self {
+        PyDockerConnectionBuilder { image: image.to_string() }
+    }
+
+    fn build(&self) -> PyDockerConnection {
+        PyDockerConnection { inner: DockerConnectionBuilder::new(&self.image).build() }
+    }
+
+    fn __repr__(&self) -> &'static str { "DockerConnectionBuilder()" }
 }

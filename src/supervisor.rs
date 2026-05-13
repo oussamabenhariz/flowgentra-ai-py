@@ -736,13 +736,21 @@ impl PySupervisor {
 
     /// Run the supervisor loop.
     ///
+    /// Accepts either a native `State` object or a plain Python `dict`.
     /// In simple mode (created with router), uses the Python router function.
     /// In strategy mode (created with from_config), delegates to the Rust SupervisorNode.
-    fn run(&self, state: &PyState) -> PyResult<PyState> {
+    fn run(&self, state: &Bound<'_, PyAny>) -> PyResult<PyState> {
+        let py_state = if let Ok(dict) = state.downcast::<pyo3::types::PyDict>() {
+            let inner = crate::graph::pydict_to_dynstate(dict)?;
+            PyState { inner }
+        } else {
+            state.extract::<PyState>()?
+        };
+
         if let Some(ref config) = self.config {
-            self.run_strategy(config, state)
+            self.run_strategy(config, &py_state)
         } else if let Some(ref router) = self.router {
-            self.run_router(router, state)
+            self.run_router(router, &py_state)
         } else {
             Err(crate::error::AgentExecutionError::new_err("Supervisor has no router or config"))
         }

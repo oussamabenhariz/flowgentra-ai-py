@@ -20,13 +20,16 @@ use pyo3::prelude::*;
 
 use flowgentra_ai::core::rag::{
     bm25_retriever::{Bm25Config, Bm25Document, Bm25Retriever},
-    compression_retriever::{DocumentCompressor, EmbeddingsFilter},
+    compression_retriever::{DocumentCompressor, EmbeddingsFilter, LLMCompressor},
     ensemble_retriever::{AsyncRetriever, VectorRetriever},
+    filter::MetadataFilter,
     multi_vector_retriever::{MultiVectorConfig, MultiVectorParent, MultiVectorRetriever, VectorView},
     parent_doc_retriever::{ParentDocConfig, ParentDocument, ParentDocumentRetriever},
     reorder::{reorder_for_long_context, ReorderStrategy},
+    self_query_retriever::{filter_from_json_object, SelfQueryConfig},
     time_weighted_retriever::{TimeWeightedConfig, TimeWeightedRetriever},
     vector_db::{SearchResult, VectorStoreError},
+    retrievers::RetrievalConfig,
 };
 
 use crate::run_async;
@@ -811,4 +814,252 @@ pub fn py_reorder_for_long_context(
     let strat = strategy.map(|s| s.inner).unwrap_or(ReorderStrategy::LostInTheMiddle);
     let docs: Vec<SearchResult> = results.iter().map(|r| r.inner.clone()).collect();
     to_py_results(reorder_for_long_context(docs, strat))
+}
+
+// ── PySelfQueryRetriever ──────────────────────────────────────────────────────
+
+/// LLM-powered retriever that extracts metadata filters from natural language.
+///
+/// The ``extractor`` callable receives the query string and must return either
+/// ``None`` (no filter) or a flat ``dict`` (converted to equality filters).
+///
+/// Example::
+///
+///     def extract_filter(query: str):
+///         if "2024" in query:
+///             return {"year": 2024}
+///         return None
+///
+///     r = SelfQueryRetriever(store, embeddings, extract_filter)
+///     results = r.retrieve("Rust blog posts from 2024")
+#[pyclass(name = "SelfQueryRetriever")]
+pub struct PySelfQueryRetriever {
+    store: Arc<dyn flowgentra_ai::core::rag::VectorStoreBackend>,
+    embeddings: Arc<flowgentra_ai::core::rag::Embeddings>,
+    extractor: PyObject,
+    config: SelfQueryConfig,
+}
+
+impl PySelfQueryRetriever {
+    fn call_extractor(&self, query: &str) -> PyResult<Option<MetadataFilter>> {
+        let query = query.to_string();
+        let extractor = Python::with_gil(|py| self.extractor.clone_ref(py));
+        tokio::task::block_in_place(|| {
+            Python::with_gil(|py| -> PyResult<Option<MetadataFilter>> {
+                let py_result = extractor.call1(py, (query,))?;
+                if py_result.is_none(py) {
+                    return Ok(None);
+                }
+                let json_val = crate::py_to_json(py_result.bind(py))?;
+                match &json_val {
+                    serde_json::Value::Object(map) => Ok(filter_from_json_object(map)),
+                    _ => Ok(None),
+                }
+            })
+        })
+    }
+}
+
+#[pymethods]
+impl PySelfQueryRetriever {
+    /// Args:
+    ///     store:       ``InMemoryVectorStore`` instance.
+    ///     embeddings:  ``Embeddings`` instance.
+    ///     extractor:   Callable ``(query: str) -> dict | None``.
+    ///     top_k:       Results to return (default 5).
+    ///     threshold:   Minimum similarity score (default 0.0).
+    ///     fallback:    Run unfiltered search when extractor returns None (default True).
+    #[new]
+    #[pyo3(signature = (store, embeddings, extractor, top_k=5, threshold=0.0, fallback=true))]
+    fn new(
+        store: &crate::vector_store::PyInMemoryVectorStore,
+        embeddings: &crate::vector_store::PyEmbeddings,
+        extractor: PyObject,
+        top_k: usize,
+        threshold: f32,
+        fallback: bool,
+    ) -> Self {
+        PySelfQueryRetriever {
+            store: store.inner.clone(),
+            embeddings: embeddings.inner.clone(),
+            extractor,
+            config: SelfQueryConfig {
+                retrieval: RetrievalConfig {
+                    top_k,
+                    similarity_threshold: threshold,
+                    ..Default::default()
+                },
+                fallback_on_no_filter: fallback,
+            },
+        }
+    }
+
+    /// Retrieve documents with LLM-extracted metadata filter.
+    fn retrieve(&self, query: &str) -> PyResult<Vec<PySearchResult>> {
+        let filter = self.call_extractor(query)?;
+
+        if filter.is_none() && !self.config.fallback_on_no_filter {
+            return Ok(vec![]);
+        }
+
+        let store = self.store.clone();
+        let embeddings = self.embeddings.clone();
+        let top_k = self.config.retrieval.top_k;
+        let threshold = self.config.retrieval.similarity_threshold;
+        let q = query.to_string();
+
+        let results = run_async(async move {
+            let emb = embeddings.embed(&q).await
+                .map_err(|e| VectorStoreError::Unknown(format!("Embed error: {e}")))?;
+            let mut results = store.search(emb, top_k, filter).await?;
+            results.retain(|r| r.score >= threshold);
+            results.truncate(top_k);
+            Ok::<Vec<SearchResult>, VectorStoreError>(results)
+        }).map_err(to_py_err)?;
+
+        Ok(to_py_results(results))
+    }
+
+    /// Same as retrieve() but also returns whether a filter was extracted (True/False).
+    fn retrieve_with_filter(&self, py: Python<'_>, query: &str) -> PyResult<(Vec<PySearchResult>, PyObject)> {
+        let filter = self.call_extractor(query)?;
+        let had_filter = filter.is_some();
+        let py_filter = had_filter.into_py(py);
+
+        if filter.is_none() && !self.config.fallback_on_no_filter {
+            return Ok((vec![], py.None()));
+        }
+
+        let store = self.store.clone();
+        let embeddings = self.embeddings.clone();
+        let top_k = self.config.retrieval.top_k;
+        let threshold = self.config.retrieval.similarity_threshold;
+        let q = query.to_string();
+
+        let results = run_async(async move {
+            let emb = embeddings.embed(&q).await
+                .map_err(|e| VectorStoreError::Unknown(format!("Embed error: {e}")))?;
+            let mut results = store.search(emb, top_k, filter).await?;
+            results.retain(|r| r.score >= threshold);
+            results.truncate(top_k);
+            Ok::<Vec<SearchResult>, VectorStoreError>(results)
+        }).map_err(to_py_err)?;
+
+        Ok((to_py_results(results), py_filter))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("SelfQueryRetriever(top_k={})", self.config.retrieval.top_k)
+    }
+}
+
+// ── PyLLMCompressor ───────────────────────────────────────────────────────────
+
+/// LLM-based document compressor for ContextualCompressionRetriever.
+///
+/// Sends each candidate document to an LLM and keeps only the relevant portions.
+/// Documents returning "NOT_RELEVANT" are dropped.
+///
+/// Example::
+///
+///     compressor = LLMCompressor(
+///         api_url="https://api.openai.com/v1/chat/completions",
+///         api_key="sk-...",
+///         model="gpt-4o-mini",
+///         max_tokens=256,
+///     )
+///     r = ContextualCompressionRetriever(base_ret, compressor, top_k=5)
+///     results = r.retrieve("rust ownership")
+#[pyclass(name = "LLMCompressor")]
+pub struct PyLLMCompressor {
+    inner: Arc<LLMCompressor>,
+}
+
+#[pymethods]
+impl PyLLMCompressor {
+    /// Args:
+    ///     api_url:    OpenAI-compatible chat completions URL.
+    ///     api_key:    API key.
+    ///     model:      LLM model name (default ``"gpt-4o-mini"``).
+    ///     max_tokens: Max tokens for extracted excerpt (default 256).
+    #[new]
+    #[pyo3(signature = (api_url, api_key, model="gpt-4o-mini", max_tokens=256))]
+    fn new(api_url: &str, api_key: &str, model: &str, max_tokens: u32) -> Self {
+        PyLLMCompressor {
+            inner: Arc::new(LLMCompressor::new(api_url, api_key, model, max_tokens)),
+        }
+    }
+
+    /// Compress documents — keep only parts relevant to query.
+    ///
+    /// Args:
+    ///     query:     The original user query.
+    ///     documents: List of ``SearchResult`` candidates.
+    ///
+    /// Returns:
+    ///     Filtered/compressed list.
+    fn compress(&self, query: &str, documents: Vec<PyRef<PySearchResult>>) -> PyResult<Vec<PySearchResult>> {
+        let compressor = self.inner.clone();
+        let docs: Vec<SearchResult> = documents.iter().map(|r| r.inner.clone()).collect();
+        let q = query.to_string();
+        let results = run_async(async move {
+            compressor.compress(&q, docs).await
+        }).map_err(to_py_err)?;
+        Ok(to_py_results(results))
+    }
+
+    fn __repr__(&self) -> String {
+        "LLMCompressor(...)".to_string()
+    }
+}
+
+// ── PyDocumentCompressorPipeline ──────────────────────────────────────────────
+
+/// Chains multiple compressors in sequence — output of each feeds the next.
+///
+/// Each compressor must be an object with ``compress(query, docs)`` method
+/// (``EmbeddingsFilter``, ``LLMCompressor``, or any custom class).
+///
+/// Example::
+///
+///     pipeline = DocumentCompressorPipeline([
+///         EmbeddingsFilter(emb, threshold=0.6),
+///         LLMCompressor(api_url, api_key, model="gpt-4o-mini"),
+///     ])
+///     r = ContextualCompressionRetriever(base_ret, pipeline, top_k=5)
+#[pyclass(name = "DocumentCompressorPipeline")]
+pub struct PyDocumentCompressorPipeline {
+    compressors: Vec<PyObject>,
+}
+
+#[pymethods]
+impl PyDocumentCompressorPipeline {
+    /// Args:
+    ///     compressors: List of compressor objects with ``compress(query, docs)`` method.
+    #[new]
+    fn new(compressors: Vec<PyObject>) -> Self {
+        PyDocumentCompressorPipeline { compressors }
+    }
+
+    /// Run all compressors in sequence.
+    fn compress(&self, py: Python<'_>, query: &str, documents: Vec<PyRef<PySearchResult>>) -> PyResult<Vec<PyObject>> {
+        let mut current: Vec<PyObject> = documents
+            .iter()
+            .map(|r| r.clone().into_py(py))
+            .collect();
+
+        for compressor in &self.compressors {
+            if current.is_empty() {
+                break;
+            }
+            let list = pyo3::types::PyList::new_bound(py, &current);
+            let result = compressor.call_method1(py, "compress", (query, list))?;
+            current = result.extract(py)?;
+        }
+        Ok(current)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("DocumentCompressorPipeline(n={})", self.compressors.len())
+    }
 }

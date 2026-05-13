@@ -39,6 +39,26 @@ impl PyMessageGraph {
             .collect())
     }
 
+    /// Get the list of node names in this graph.
+    fn node_names(&self) -> Vec<String> {
+        self.inner.node_names()
+    }
+
+    /// Get the entry point node name.
+    fn entry_point(&self) -> String {
+        self.inner.entry_point().to_string()
+    }
+
+    /// Export the graph as a Mermaid diagram string.
+    fn to_mermaid(&self) -> String {
+        self.inner.to_mermaid()
+    }
+
+    /// Export the graph as a Graphviz DOT string.
+    fn to_dot(&self) -> String {
+        self.inner.to_dot()
+    }
+
     fn __repr__(&self) -> String {
         "MessageGraph(...)".to_string()
     }

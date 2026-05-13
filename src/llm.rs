@@ -242,6 +242,18 @@ impl PyLLMConfig {
         }
     }
 
+    /// Add a provider-specific extra parameter.
+    ///
+    /// Example:
+    ///     config = LLMConfig("huggingface", "mistralai/Mistral-7B", api_key=...)
+    ///     config = config.with_extra_param("mode", "tgi").with_extra_param("endpoint", "http://localhost:8080")
+    fn with_extra_param(&self, key: String, value: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let val = crate::py_to_json(value)?;
+        Ok(PyLLMConfig {
+            inner: self.inner.clone().with_extra_param(key, val),
+        })
+    }
+
     fn __repr__(&self) -> String {
         format!("LLMConfig(model='{}')", self.inner.model)
     }
@@ -417,6 +429,28 @@ impl PyLLM {
         Ok(PyMessage { inner: result })
     }
 
+    /// Stream the LLM response chunk by chunk. Returns an iterable LLMStream.
+    ///
+    /// Example:
+    ///     stream = client.chat_stream([Message.user("Tell me a long story")])
+    ///     for chunk in stream:
+    ///         print(chunk, end="", flush=True)
+    fn chat_stream(&self, messages: Vec<PyMessage>) -> PyResult<PyLLMStream> {
+        let msgs: Vec<Message> = messages.into_iter().map(|m| m.inner).collect();
+        let rx = crate::run_async(self.inner.chat_stream(msgs)).map_err(to_py_err)?;
+        Ok(PyLLMStream { inner: Some(rx) })
+    }
+
+    /// Send messages and get a structured JSON response.
+    ///
+    /// Returns:
+    ///     The parsed response as a Python dict (or list/scalar).
+    fn chat_structured(&self, messages: Vec<PyMessage>) -> PyResult<PyObject> {
+        let msgs: Vec<Message> = messages.into_iter().map(|m| m.inner).collect();
+        let val = crate::run_async(self.inner.chat_structured(msgs)).map_err(to_py_err)?;
+        Python::with_gil(|py| crate::json_to_py(py, &val))
+    }
+
     /// Wrap this client with a response cache.
     ///
     /// Example:
@@ -455,6 +489,51 @@ impl PyLLM {
 
     fn __repr__(&self) -> String {
         "LLM(...)".to_string()
+    }
+}
+
+// ─── PyLLMStream ─────────────────────────────────────────────────────────────
+
+/// Iterable stream of LLM response chunks.
+///
+/// Returned by LLM.chat_stream() — iterate to receive tokens one by one.
+///
+/// Example:
+///     stream = client.chat_stream([Message.user("Tell me a story")])
+///     for chunk in stream:
+///         print(chunk, end="", flush=True)
+///     print()
+#[pyclass(name = "LLMStream")]
+pub struct PyLLMStream {
+    inner: Option<tokio::sync::mpsc::Receiver<String>>,
+}
+
+#[pymethods]
+impl PyLLMStream {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self) -> Option<String> {
+        let rx = self.inner.as_mut()?;
+        let chunk = match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                use tokio::runtime::RuntimeFlavor;
+                match handle.runtime_flavor() {
+                    RuntimeFlavor::CurrentThread => crate::get_runtime().block_on(rx.recv()),
+                    _ => tokio::task::block_in_place(|| handle.block_on(rx.recv())),
+                }
+            }
+            Err(_) => crate::get_runtime().block_on(rx.recv()),
+        };
+        if chunk.is_none() {
+            self.inner = None;
+        }
+        chunk
+    }
+
+    fn __repr__(&self) -> &'static str {
+        "LLMStream()"
     }
 }
 

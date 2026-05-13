@@ -69,6 +69,10 @@ mod indexing;
 mod loaders_extra;
 mod web_retrievers;
 mod skills;
+mod eval_advanced;
+mod middleware;
+mod prometheus;
+mod otel;
 
 use agent::*;
 use agents::*;
@@ -116,6 +120,7 @@ use extra_embeddings::*;
 use indexing::*;
 use loaders_extra::*;
 use web_retrievers::*;
+use eval_advanced::*;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -294,6 +299,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     llm_module.add_class::<PyToolDefinition>()?;
     llm_module.add_class::<PyTokenUsage>()?;
     llm_module.add_class::<PyLLM>()?;
+    llm_module.add_class::<llm::PyLLMStream>()?;
     llm_module.add_function(wrap_pyfunction!(llm::py_create_llm, &llm_module)?)?;
     llm_module.add_function(wrap_pyfunction!(py_estimate_tokens, &llm_module)?)?;
     llm_module.add_function(wrap_pyfunction!(py_model_pricing, &llm_module)?)?;
@@ -408,6 +414,9 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     rag_module.add_class::<PyParentDocumentRetriever>()?;
     rag_module.add_class::<PyReorderStrategy>()?;
     rag_module.add_function(wrap_pyfunction!(retrievers_advanced::py_reorder_for_long_context, &rag_module)?)?;
+    rag_module.add_class::<PySelfQueryRetriever>()?;
+    rag_module.add_class::<PyLLMCompressor>()?;
+    rag_module.add_class::<PyDocumentCompressorPipeline>()?;
 
     // ── Web Retrievers ─────────────────────────────────────────────────────────
     rag_module.add_class::<PyWikipediaRetriever>()?;
@@ -478,16 +487,51 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     eval_module.add_function(wrap_pyfunction!(rag_eval::py_mean_ndcg, &eval_module)?)?;
     eval_module.add_function(wrap_pyfunction!(rag_eval::py_rag_evaluate, &eval_module)?)?;
     eval_module.add_function(wrap_pyfunction!(remaining::py_evaluate_output_score, &eval_module)?)?;
+    // Advanced evaluation: confidence, node scoring, retry, smart fallback
+    eval_module.add_class::<PyConfidenceLevel>()?;
+    eval_module.add_class::<PyConfidenceConfig>()?;
+    eval_module.add_class::<PyConfidenceScore>()?;
+    eval_module.add_class::<PyScoringCriteria>()?;
+    eval_module.add_class::<PyNodeScore>()?;
+    eval_module.add_class::<PyRetryConfig>()?;
+    eval_module.add_class::<PyRetryResult>()?;
+    eval_module.add_class::<PyFallbackLevel>()?;
+    eval_module.add_function(wrap_pyfunction!(py_score_confidence, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_score_node, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_retry_should_retry, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_retry_delay_ms, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_retry_temperature, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_retry_feedback, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_check_circuit_breaker, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_retry_generate_report, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_generate_content_fallback, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_refine_content_fallback, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_fallback_retry_message, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(py_should_fallback, &eval_module)?)?;
     m.add_submodule(&eval_module)?;
 
     // ── Observability Submodule ────────────────────────────────────────────────
     let obs_module = PyModule::new_bound(m.py(), "observability")?;
     obs_module.add_class::<PyExecutionTrace>()?;
     obs_module.add_class::<PyExecutionTracer>()?;
+    obs_module.add_class::<observability::PyEventBroadcaster>()?;
+    obs_module.add_class::<observability::PyEventReceiver>()?;
+    obs_module.add_class::<observability::PyReplayMode>()?;
     obs_module.add_function(wrap_pyfunction!(observability::py_init_tracing, &obs_module)?)?;
     obs_module.add_function(wrap_pyfunction!(visualization::py_visualize_graph, &obs_module)?)?;
     obs_module.add_function(wrap_pyfunction!(visualization::py_graph_to_dot, &obs_module)?)?;
     obs_module.add_function(wrap_pyfunction!(visualization::py_graph_to_mermaid, &obs_module)?)?;
+    // Prometheus metrics
+    obs_module.add_class::<prometheus::PyPrometheusExporter>()?;
+    obs_module.add_class::<prometheus::PyMetricsCollector>()?;
+    obs_module.add_function(wrap_pyfunction!(prometheus::py_record_llm_tokens, &obs_module)?)?;
+    // OpenTelemetry spans
+    obs_module.add_class::<otel::PyOtelStatus>()?;
+    obs_module.add_class::<otel::PyOtelAttribute>()?;
+    obs_module.add_class::<otel::PyOtelSpan>()?;
+    obs_module.add_function(wrap_pyfunction!(otel::py_trace_to_otel_spans, &obs_module)?)?;
+    obs_module.add_function(wrap_pyfunction!(otel::py_spans_to_otlp_json, &obs_module)?)?;
+    obs_module.add_function(wrap_pyfunction!(otel::py_export_to_otlp, &obs_module)?)?;
     m.add_submodule(&obs_module)?;
 
     // ── Advanced Nodes Submodule ───────────────────────────────────────────────
@@ -560,6 +604,18 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     mcp_module.add_class::<mcp::PyMCPClient>()?;
     mcp_module.add_function(wrap_pyfunction!(mcp::py_create_mcp_client, &mcp_module)?)?;
     mcp_module.add_function(wrap_pyfunction!(mcp::py_merge_tool_lists, &mcp_module)?)?;
+    // SSE streaming
+    mcp_module.add_class::<mcp::PySSEMessage>()?;
+    mcp_module.add_class::<mcp::PySSEStreamReceiver>()?;
+    mcp_module.add_class::<mcp::PySSEConnection>()?;
+    // Stdio process connections
+    mcp_module.add_class::<mcp::PyStdioConnection>()?;
+    mcp_module.add_class::<mcp::PyStdioConnectionBuilder>()?;
+    // Docker connections
+    mcp_module.add_class::<mcp::PyContainerState>()?;
+    mcp_module.add_class::<mcp::PyDockerConfig>()?;
+    mcp_module.add_class::<mcp::PyDockerConnection>()?;
+    mcp_module.add_class::<mcp::PyDockerConnectionBuilder>()?;
     m.add_submodule(&mcp_module)?;
 
     // ── Utilities Submodule ────────────────────────────────────────────────────
@@ -609,6 +665,13 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     db_module.add_class::<PyCassandraDocumentStore>()?;
     db_module.add_class::<PyElasticsearchDocumentStore>()?;
     m.add_submodule(&db_module)?;
+
+    // ── Middleware Submodule ───────────────────────────────────────────────────
+    let mw_module = PyModule::new_bound(m.py(), "middleware")?;
+    mw_module.add_class::<middleware::PyExecutionMetrics>()?;
+    mw_module.add_class::<middleware::PyLoggingMiddleware>()?;
+    mw_module.add_class::<middleware::PyMetricsMiddleware>()?;
+    m.add_submodule(&mw_module)?;
 
     // ── Skills Submodule ───────────────────────────────────────────────────────
     let skills_module = PyModule::new_bound(m.py(), "skills")?;
