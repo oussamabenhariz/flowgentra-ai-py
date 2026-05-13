@@ -27,17 +27,21 @@ struct PlannerHandlerNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for PlannerHandlerNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         // Create a fresh handler each time (the handler is cheap — it's just a closure)
-        let handler = create_planner_handler(
-            Arc::clone(&self.llm),
-            self.prompt_template.clone(),
-        );
+        let handler = create_planner_handler(Arc::clone(&self.llm), self.prompt_template.clone());
         // The handler takes ownership of state, so clone it
-        let result_state = handler(state.clone()).await.map_err(|e| StateGraphError::ExecutionError {
-            node: self.name.clone(),
-            reason: format!("Planner error: {}", e),
-        })?;
+        let result_state =
+            handler(state.clone())
+                .await
+                .map_err(|e| StateGraphError::ExecutionError {
+                    node: self.name.clone(),
+                    reason: format!("Planner error: {}", e),
+                })?;
         // Return all keys from result as a DynStateUpdate (planner sets _next_node etc.)
         let mut update = DynStateUpdate::new();
         for key in result_state.keys() {
@@ -92,11 +96,7 @@ impl PyPlannerNode {
     ///     prompt: Optional custom system prompt (replaces default planner prompt)
     #[new]
     #[pyo3(signature = (name, llm, prompt=None))]
-    fn new(
-        name: &str,
-        llm: &PyLLM,
-        prompt: Option<String>,
-    ) -> Self {
+    fn new(name: &str, llm: &PyLLM, prompt: Option<String>) -> Self {
         PyPlannerNode {
             name: name.to_string(),
             llm: llm.inner.clone(),
@@ -113,15 +113,15 @@ impl PyPlannerNode {
     ///
     /// Sets `_next_node` in the returned state.
     fn run(&self, state: &PyState) -> PyResult<PyState> {
-        let handler = create_planner_handler(
-            Arc::clone(&self.llm),
-            self.prompt_template.clone(),
-        );
+        let handler = create_planner_handler(Arc::clone(&self.llm), self.prompt_template.clone());
 
         let result = crate::run_async(handler(state.inner.clone()));
         match result {
             Ok(new_state) => Ok(PyState { inner: new_state }),
-            Err(e) => Err(crate::error::AgentExecutionError::new_err(format!("Planner error: {}", e))),
+            Err(e) => Err(crate::error::AgentExecutionError::new_err(format!(
+                "Planner error: {}",
+                e
+            ))),
         }
     }
 

@@ -21,9 +21,9 @@
 //!     state.restore(snap)             # roll back
 //!     print(state["steps"])           # 0
 
-use pyo3::prelude::*;
-use pyo3::exceptions::PyKeyError;
 use crate::error::SerializationError;
+use pyo3::exceptions::PyKeyError;
+use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde_json::Value;
 
@@ -228,9 +228,7 @@ impl PyState {
     fn __repr__(&self) -> String {
         format!(
             "State({})",
-            self.inner
-                .to_json_string()
-                .unwrap_or_else(|_| "{}".into())
+            self.inner.to_json_string().unwrap_or_else(|_| "{}".into())
         )
     }
 

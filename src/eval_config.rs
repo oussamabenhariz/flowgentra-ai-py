@@ -2,10 +2,10 @@
 
 use pyo3::prelude::*;
 
+use crate::error::to_py_err;
+use crate::state::PyState;
 use flowgentra_ai::core::config::{EvaluationConfig, GradingConfig, ScoringConfig};
 use flowgentra_ai::core::evaluation::reporting::{EvaluationReport, NodeResult};
-use crate::state::PyState;
-use crate::error::to_py_err;
 
 // ─── PyScoringConfig ────────────────────────────────────────────────────────
 
@@ -154,12 +154,18 @@ impl PyEvaluationConfig {
 
     #[getter]
     fn scoring(&self) -> Option<PyScoringConfig> {
-        self.inner.scoring.as_ref().map(|s| PyScoringConfig { inner: s.clone() })
+        self.inner
+            .scoring
+            .as_ref()
+            .map(|s| PyScoringConfig { inner: s.clone() })
     }
 
     #[getter]
     fn grading(&self) -> Option<PyGradingConfig> {
-        self.inner.grading.as_ref().map(|g| PyGradingConfig { inner: g.clone() })
+        self.inner
+            .grading
+            .as_ref()
+            .map(|g| PyGradingConfig { inner: g.clone() })
     }
 
     #[getter]

@@ -93,17 +93,41 @@ pub struct PyJsonSchema {
 #[pymethods]
 impl PyJsonSchema {
     #[staticmethod]
-    fn object() -> Self { PyJsonSchema { inner: JsonSchema::object() } }
+    fn object() -> Self {
+        PyJsonSchema {
+            inner: JsonSchema::object(),
+        }
+    }
     #[staticmethod]
-    fn string() -> Self { PyJsonSchema { inner: JsonSchema::string() } }
+    fn string() -> Self {
+        PyJsonSchema {
+            inner: JsonSchema::string(),
+        }
+    }
     #[staticmethod]
-    fn number() -> Self { PyJsonSchema { inner: JsonSchema::number() } }
+    fn number() -> Self {
+        PyJsonSchema {
+            inner: JsonSchema::number(),
+        }
+    }
     #[staticmethod]
-    fn integer() -> Self { PyJsonSchema { inner: JsonSchema::integer() } }
+    fn integer() -> Self {
+        PyJsonSchema {
+            inner: JsonSchema::integer(),
+        }
+    }
     #[staticmethod]
-    fn boolean() -> Self { PyJsonSchema { inner: JsonSchema::boolean() } }
+    fn boolean() -> Self {
+        PyJsonSchema {
+            inner: JsonSchema::boolean(),
+        }
+    }
     #[staticmethod]
-    fn array() -> Self { PyJsonSchema { inner: JsonSchema::array() } }
+    fn array() -> Self {
+        PyJsonSchema {
+            inner: JsonSchema::array(),
+        }
+    }
 
     fn with_description(&mut self, desc: &str) {
         self.inner.description = Some(desc.to_string());
@@ -119,10 +143,14 @@ impl PyJsonSchema {
     }
 
     #[getter]
-    fn schema_type(&self) -> String { self.inner.schema_type.clone() }
+    fn schema_type(&self) -> String {
+        self.inner.schema_type.clone()
+    }
 
     #[getter]
-    fn description(&self) -> Option<String> { self.inner.description.clone() }
+    fn description(&self) -> Option<String> {
+        self.inner.description.clone()
+    }
 
     fn __repr__(&self) -> String {
         format!("JsonSchema(type='{}')", self.inner.schema_type)
@@ -145,7 +173,9 @@ impl PyToolRegistry {
     #[new]
     #[pyo3(signature = (tools=None))]
     fn new(tools: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let mut registry = PyToolRegistry { inner: ToolRegistry::new() };
+        let mut registry = PyToolRegistry {
+            inner: ToolRegistry::new(),
+        };
 
         if let Some(tools_arg) = tools {
             if let Ok(dict) = tools_arg.downcast::<PyDict>() {
@@ -173,7 +203,9 @@ impl PyToolRegistry {
     /// Create a registry with all keyless, non-destructive built-in tools pre-registered.
     #[staticmethod]
     fn with_builtins() -> Self {
-        PyToolRegistry { inner: ToolRegistry::with_builtins() }
+        PyToolRegistry {
+            inner: ToolRegistry::with_builtins(),
+        }
     }
 
     /// Call a tool by name with a dict input.
@@ -196,11 +228,17 @@ impl PyToolRegistry {
 
     /// List all registered tool names.
     fn list_names(&self) -> Vec<String> {
-        self.inner.list_definitions().into_iter().map(|d| d.name).collect()
+        self.inner
+            .list_definitions()
+            .into_iter()
+            .map(|d| d.name)
+            .collect()
     }
 
     /// Check if a tool is registered.
-    fn has(&self, name: &str) -> bool { self.inner.has(name) }
+    fn has(&self, name: &str) -> bool {
+        self.inner.has(name)
+    }
 
     /// Get tool definition as a dict.
     fn get(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyDict>> {
@@ -211,7 +249,9 @@ impl PyToolRegistry {
         Ok(dict.into())
     }
 
-    fn __len__(&self) -> usize { self.inner.len() }
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
 
     fn __repr__(&self) -> String {
         format!("ToolRegistry(tools={})", self.inner.len())

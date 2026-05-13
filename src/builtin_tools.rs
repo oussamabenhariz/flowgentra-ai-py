@@ -21,10 +21,14 @@ pub struct PyCalculatorTool {
 impl PyCalculatorTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(CalculatorTool::new()) }
+        Self {
+            inner: Arc::new(CalculatorTool::new()),
+        }
     }
 
-    fn __repr__(&self) -> String { "CalculatorTool()".to_string() }
+    fn __repr__(&self) -> String {
+        "CalculatorTool()".to_string()
+    }
 
     fn call(&self, py: Python<'_>, input: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         let v = py_to_json(input)?;
@@ -33,7 +37,7 @@ impl PyCalculatorTool {
     }
 
     fn definition(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let val = serde_json::to_value(&self.inner.definition())
+        let val = serde_json::to_value(self.inner.definition())
             .map_err(|e| SerializationError::new_err(e.to_string()))?;
         json_to_py(py, &val)
     }
@@ -55,10 +59,14 @@ pub struct PyWebRequestTool {
 impl PyWebRequestTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(WebRequestTool::new()) }
+        Self {
+            inner: Arc::new(WebRequestTool::new()),
+        }
     }
 
-    fn __repr__(&self) -> String { "WebRequestTool()".to_string() }
+    fn __repr__(&self) -> String {
+        "WebRequestTool()".to_string()
+    }
 
     fn call(&self, py: Python<'_>, input: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         let v = py_to_json(input)?;
@@ -67,7 +75,7 @@ impl PyWebRequestTool {
     }
 
     fn definition(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let val = serde_json::to_value(&self.inner.definition())
+        let val = serde_json::to_value(self.inner.definition())
             .map_err(|e| SerializationError::new_err(e.to_string()))?;
         json_to_py(py, &val)
     }
@@ -85,10 +93,14 @@ pub struct PyFilesTool {
 impl PyFilesTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(FilesTool::default()) }
+        Self {
+            inner: Arc::new(FilesTool::default()),
+        }
     }
 
-    fn __repr__(&self) -> String { "FilesTool()".to_string() }
+    fn __repr__(&self) -> String {
+        "FilesTool()".to_string()
+    }
 
     fn call(&self, py: Python<'_>, input: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         let v = py_to_json(input)?;
@@ -97,7 +109,7 @@ impl PyFilesTool {
     }
 
     fn definition(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let val = serde_json::to_value(&self.inner.definition())
+        let val = serde_json::to_value(self.inner.definition())
             .map_err(|e| SerializationError::new_err(e.to_string()))?;
         json_to_py(py, &val)
     }

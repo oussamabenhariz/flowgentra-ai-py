@@ -23,10 +23,10 @@
 //! `IoError` maps to `OSError` (standard Python I/O exception) rather than
 //! `FlowgentraAIError` to preserve built-in semantics.
 
-use pyo3::prelude::*;
-use pyo3::exceptions::PyOSError;
 use flowgentra_ai::core::error::FlowgentraError;
 use flowgentra_ai::core::state_graph::StateGraphError;
+use pyo3::exceptions::PyOSError;
+use pyo3::prelude::*;
 
 // ─── Custom exception hierarchy ──────────────────────────────────────────────
 
@@ -52,18 +52,39 @@ pyo3::create_exception!(_native, InternalError, FlowgentraAIError);
 /// `from flowgentra_ai._native import LLMError` works as expected.
 pub fn register_exceptions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
-    m.add("FlowgentraAIError", py.get_type_bound::<FlowgentraAIError>())?;
-    m.add("ConfigurationError", py.get_type_bound::<ConfigurationError>())?;
+    m.add(
+        "FlowgentraAIError",
+        py.get_type_bound::<FlowgentraAIError>(),
+    )?;
+    m.add(
+        "ConfigurationError",
+        py.get_type_bound::<ConfigurationError>(),
+    )?;
     m.add("ValidationError", py.get_type_bound::<ValidationError>())?;
     m.add("GraphError", py.get_type_bound::<GraphError>())?;
-    m.add("NodeNotFoundError", py.get_type_bound::<NodeNotFoundError>())?;
+    m.add(
+        "NodeNotFoundError",
+        py.get_type_bound::<NodeNotFoundError>(),
+    )?;
     m.add("CycleError", py.get_type_bound::<CycleError>())?;
     m.add("LLMError", py.get_type_bound::<LLMError>())?;
     m.add("MCPError", py.get_type_bound::<MCPError>())?;
-    m.add("ToolExecutionError", py.get_type_bound::<ToolExecutionError>())?;
-    m.add("AgentExecutionError", py.get_type_bound::<AgentExecutionError>())?;
-    m.add("WorkflowTimeoutError", py.get_type_bound::<WorkflowTimeoutError>())?;
-    m.add("SerializationError", py.get_type_bound::<SerializationError>())?;
+    m.add(
+        "ToolExecutionError",
+        py.get_type_bound::<ToolExecutionError>(),
+    )?;
+    m.add(
+        "AgentExecutionError",
+        py.get_type_bound::<AgentExecutionError>(),
+    )?;
+    m.add(
+        "WorkflowTimeoutError",
+        py.get_type_bound::<WorkflowTimeoutError>(),
+    )?;
+    m.add(
+        "SerializationError",
+        py.get_type_bound::<SerializationError>(),
+    )?;
     m.add("CheckpointError", py.get_type_bound::<CheckpointError>())?;
     m.add("InternalError", py.get_type_bound::<InternalError>())?;
     Ok(())

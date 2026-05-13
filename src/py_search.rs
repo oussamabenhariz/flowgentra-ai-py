@@ -25,7 +25,9 @@ macro_rules! impl_tool {
                     .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
                 json_to_py(py, &val)
             }
-            fn __repr__(&self) -> String { $repr.to_string() }
+            fn __repr__(&self) -> String {
+                $repr.to_string()
+            }
         }
     };
 }
@@ -43,10 +45,16 @@ impl PyDuckDuckGoSearchTool {
     #[new]
     #[pyo3(signature = (max_results=None))]
     fn new(max_results: Option<usize>) -> Self {
-        Self { inner: Arc::new(DuckDuckGoSearchTool::new(max_results.unwrap_or(5))) }
+        Self {
+            inner: Arc::new(DuckDuckGoSearchTool::new(max_results.unwrap_or(5))),
+        }
     }
 }
-impl_tool!(PyDuckDuckGoSearchTool, DuckDuckGoSearchTool, "DuckDuckGoSearchTool()");
+impl_tool!(
+    PyDuckDuckGoSearchTool,
+    DuckDuckGoSearchTool,
+    "DuckDuckGoSearchTool()"
+);
 
 // ─── TavilySearchTool ───────────────────────────────────────────────────────
 
@@ -65,7 +73,9 @@ impl PyTavilySearchTool {
             Some(k) => TavilySearchTool::new(k),
             None => TavilySearchTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PyTavilySearchTool, TavilySearchTool, "TavilySearchTool()");
@@ -87,10 +97,16 @@ impl PySerpApiSearchTool {
             Some(k) => SerpApiSearchTool::new(k),
             None => SerpApiSearchTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
-impl_tool!(PySerpApiSearchTool, SerpApiSearchTool, "SerpApiSearchTool()");
+impl_tool!(
+    PySerpApiSearchTool,
+    SerpApiSearchTool,
+    "SerpApiSearchTool()"
+);
 
 // ─── GoogleSerperTool ───────────────────────────────────────────────────────
 
@@ -109,7 +125,9 @@ impl PyGoogleSerperTool {
             Some(k) => GoogleSerperTool::new(k),
             None => GoogleSerperTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PyGoogleSerperTool, GoogleSerperTool, "GoogleSerperTool()");
@@ -131,7 +149,9 @@ impl PyBraveSearchTool {
             Some(k) => BraveSearchTool::new(k),
             None => BraveSearchTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PyBraveSearchTool, BraveSearchTool, "BraveSearchTool()");

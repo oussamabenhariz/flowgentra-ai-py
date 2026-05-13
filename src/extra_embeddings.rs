@@ -18,11 +18,11 @@ use std::sync::Arc;
 
 use pyo3::prelude::*;
 
+use flowgentra_ai::core::rag::embeddings::{Embeddings, EmbeddingsProvider};
 use flowgentra_ai::core::rag::extra_embeddings::{
     AzureOpenAIEmbeddings, BedrockEmbeddings, CohereEmbeddings, GoogleVertexEmbeddings,
     JinaEmbeddings, NomicEmbeddings, TogetherEmbeddings, VoyageEmbeddings,
 };
-use flowgentra_ai::core::rag::embeddings::{Embeddings, EmbeddingsProvider};
 
 use crate::run_async;
 use crate::vector_store::PyEmbeddings;
@@ -56,8 +56,12 @@ impl PyCohereEmbeddings {
     #[pyo3(signature = (api_key, model="embed-english-v3.0", for_query=false))]
     fn new(api_key: &str, model: &str, for_query: bool) -> Self {
         let mut inner = CohereEmbeddings::new(api_key, model);
-        if for_query { inner = inner.for_query(); }
-        Self { inner: Arc::new(inner) }
+        if for_query {
+            inner = inner.for_query();
+        }
+        Self {
+            inner: Arc::new(inner),
+        }
     }
 
     /// Embed a single text string. Returns a ``list[float]``.
@@ -71,7 +75,9 @@ impl PyCohereEmbeddings {
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let inner = self.inner.clone();
         run_async(async move {
-            inner.embed_batch(texts.iter().map(|s| s.as_str()).collect()).await
+            inner
+                .embed_batch(texts.iter().map(|s| s.as_str()).collect())
+                .await
         })
         .map_err(to_py_err)
     }
@@ -117,7 +123,9 @@ impl PyAzureOpenAIEmbeddings {
     fn new(endpoint: &str, deployment: &str, api_key: &str, api_version: &str) -> Self {
         let mut inner = AzureOpenAIEmbeddings::new(endpoint, deployment, api_key);
         inner.api_version = api_version.to_string();
-        Self { inner: Arc::new(inner) }
+        Self {
+            inner: Arc::new(inner),
+        }
     }
 
     fn embed(&self, text: &str) -> PyResult<Vec<f32>> {
@@ -129,7 +137,9 @@ impl PyAzureOpenAIEmbeddings {
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let inner = self.inner.clone();
         run_async(async move {
-            inner.embed_batch(texts.iter().map(|s| s.as_str()).collect()).await
+            inner
+                .embed_batch(texts.iter().map(|s| s.as_str()).collect())
+                .await
         })
         .map_err(to_py_err)
     }
@@ -141,7 +151,10 @@ impl PyAzureOpenAIEmbeddings {
     }
 
     fn __repr__(&self) -> String {
-        format!("AzureOpenAIEmbeddings(deployment='{}')", self.inner.deployment)
+        format!(
+            "AzureOpenAIEmbeddings(deployment='{}')",
+            self.inner.deployment
+        )
     }
 }
 
@@ -182,7 +195,9 @@ impl PyGoogleVertexEmbeddings {
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let inner = self.inner.clone();
         run_async(async move {
-            inner.embed_batch(texts.iter().map(|s| s.as_str()).collect()).await
+            inner
+                .embed_batch(texts.iter().map(|s| s.as_str()).collect())
+                .await
         })
         .map_err(to_py_err)
     }
@@ -193,7 +208,9 @@ impl PyGoogleVertexEmbeddings {
         }
     }
 
-    fn __repr__(&self) -> String { "GoogleVertexEmbeddings(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "GoogleVertexEmbeddings(...)".to_string()
+    }
 }
 
 // ── PyBedrockEmbeddings ───────────────────────────────────────────────────────
@@ -224,7 +241,9 @@ impl PyBedrockEmbeddings {
     #[new]
     fn new(region: &str, model_id: &str, access_key: &str, secret_key: &str) -> Self {
         Self {
-            inner: Arc::new(BedrockEmbeddings::new(region, model_id, access_key, secret_key)),
+            inner: Arc::new(BedrockEmbeddings::new(
+                region, model_id, access_key, secret_key,
+            )),
         }
     }
 
@@ -237,7 +256,9 @@ impl PyBedrockEmbeddings {
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let inner = self.inner.clone();
         run_async(async move {
-            inner.embed_batch(texts.iter().map(|s| s.as_str()).collect()).await
+            inner
+                .embed_batch(texts.iter().map(|s| s.as_str()).collect())
+                .await
         })
         .map_err(to_py_err)
     }
@@ -276,8 +297,12 @@ impl PyVoyageEmbeddings {
     #[pyo3(signature = (api_key, model="voyage-2", input_type=None))]
     fn new(api_key: &str, model: &str, input_type: Option<String>) -> Self {
         let mut inner = VoyageEmbeddings::new(api_key, model);
-        if let Some(t) = input_type { inner = inner.with_input_type(t); }
-        Self { inner: Arc::new(inner) }
+        if let Some(t) = input_type {
+            inner = inner.with_input_type(t);
+        }
+        Self {
+            inner: Arc::new(inner),
+        }
     }
 
     fn embed(&self, text: &str) -> PyResult<Vec<f32>> {
@@ -289,7 +314,9 @@ impl PyVoyageEmbeddings {
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let inner = self.inner.clone();
         run_async(async move {
-            inner.embed_batch(texts.iter().map(|s| s.as_str()).collect()).await
+            inner
+                .embed_batch(texts.iter().map(|s| s.as_str()).collect())
+                .await
         })
         .map_err(to_py_err)
     }
@@ -326,7 +353,9 @@ impl PyJinaEmbeddings {
     #[new]
     #[pyo3(signature = (api_key, model="jina-embeddings-v2-base-en"))]
     fn new(api_key: &str, model: &str) -> Self {
-        Self { inner: Arc::new(JinaEmbeddings::new(api_key, model)) }
+        Self {
+            inner: Arc::new(JinaEmbeddings::new(api_key, model)),
+        }
     }
 
     fn embed(&self, text: &str) -> PyResult<Vec<f32>> {
@@ -338,7 +367,9 @@ impl PyJinaEmbeddings {
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let inner = self.inner.clone();
         run_async(async move {
-            inner.embed_batch(texts.iter().map(|s| s.as_str()).collect()).await
+            inner
+                .embed_batch(texts.iter().map(|s| s.as_str()).collect())
+                .await
         })
         .map_err(to_py_err)
     }
@@ -374,7 +405,9 @@ impl PyTogetherEmbeddings {
     ///     model:   Model name.
     #[new]
     fn new(api_key: &str, model: &str) -> Self {
-        Self { inner: Arc::new(TogetherEmbeddings::new(api_key, model)) }
+        Self {
+            inner: Arc::new(TogetherEmbeddings::new(api_key, model)),
+        }
     }
 
     fn embed(&self, text: &str) -> PyResult<Vec<f32>> {
@@ -386,7 +419,9 @@ impl PyTogetherEmbeddings {
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let inner = self.inner.clone();
         run_async(async move {
-            inner.embed_batch(texts.iter().map(|s| s.as_str()).collect()).await
+            inner
+                .embed_batch(texts.iter().map(|s| s.as_str()).collect())
+                .await
         })
         .map_err(to_py_err)
     }
@@ -427,8 +462,12 @@ impl PyNomicEmbeddings {
     #[pyo3(signature = (api_key, model="nomic-embed-text-v1", for_query=false))]
     fn new(api_key: &str, model: &str, for_query: bool) -> Self {
         let mut inner = NomicEmbeddings::new(api_key, model);
-        if for_query { inner = inner.for_query(); }
-        Self { inner: Arc::new(inner) }
+        if for_query {
+            inner = inner.for_query();
+        }
+        Self {
+            inner: Arc::new(inner),
+        }
     }
 
     fn embed(&self, text: &str) -> PyResult<Vec<f32>> {
@@ -440,7 +479,9 @@ impl PyNomicEmbeddings {
     fn embed_batch(&self, texts: Vec<String>) -> PyResult<Vec<Vec<f32>>> {
         let inner = self.inner.clone();
         run_async(async move {
-            inner.embed_batch(texts.iter().map(|s| s.as_str()).collect()).await
+            inner
+                .embed_batch(texts.iter().map(|s| s.as_str()).collect())
+                .await
         })
         .map_err(to_py_err)
     }

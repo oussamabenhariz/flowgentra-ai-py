@@ -17,7 +17,11 @@ pub struct PyHumanInputTool {
 #[pymethods]
 impl PyHumanInputTool {
     #[new]
-    fn new() -> Self { Self { inner: Arc::new(HumanInputTool) } }
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(HumanInputTool),
+        }
+    }
 
     fn call(&self, py: Python<'_>, input: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         let v = py_to_json(input)?;
@@ -26,10 +30,12 @@ impl PyHumanInputTool {
     }
 
     fn definition(&self, py: Python<'_>) -> PyResult<PyObject> {
-        let val = serde_json::to_value(&self.inner.definition())
+        let val = serde_json::to_value(self.inner.definition())
             .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
         json_to_py(py, &val)
     }
 
-    fn __repr__(&self) -> String { "HumanInputTool()".to_string() }
+    fn __repr__(&self) -> String {
+        "HumanInputTool()".to_string()
+    }
 }

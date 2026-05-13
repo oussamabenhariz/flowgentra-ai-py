@@ -3,7 +3,9 @@
 use pyo3::prelude::*;
 use std::sync::Arc;
 
-use flowgentra_ai::core::rag::{IngestionPipeline, IngestionStats, VectorStore, VectorStoreBackend, RAGConfig, VectorStoreType};
+use flowgentra_ai::core::rag::{
+    IngestionPipeline, IngestionStats, RAGConfig, VectorStore, VectorStoreBackend, VectorStoreType,
+};
 
 use crate::error::to_py_err_generic;
 use crate::py_to_json;
@@ -85,9 +87,7 @@ impl PyIngestionPipeline {
 
     /// Ingest a list of (id, text) tuples.
     fn ingest(&self, documents: Vec<(String, String)>) -> PyResult<PyIngestionStats> {
-        let stats = 
-            crate::run_async(self.inner.ingest(documents))
-            .map_err(to_py_err_generic)?;
+        let stats = crate::run_async(self.inner.ingest(documents)).map_err(to_py_err_generic)?;
         Ok(PyIngestionStats { inner: stats })
     }
 
@@ -105,9 +105,8 @@ impl PyIngestionPipeline {
             }
             Ok(())
         })?;
-        let stats = 
-            crate::run_async(self.inner.ingest_with_metadata(docs))
-            .map_err(to_py_err_generic)?;
+        let stats =
+            crate::run_async(self.inner.ingest_with_metadata(docs)).map_err(to_py_err_generic)?;
         Ok(PyIngestionStats { inner: stats })
     }
 

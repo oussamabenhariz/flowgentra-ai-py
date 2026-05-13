@@ -25,7 +25,9 @@ macro_rules! impl_tool {
                     .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
                 json_to_py(py, &val)
             }
-            fn __repr__(&self) -> String { $repr.to_string() }
+            fn __repr__(&self) -> String {
+                $repr.to_string()
+            }
         }
     };
 }
@@ -46,7 +48,9 @@ impl PyOpenWeatherMapTool {
             Some(k) => OpenWeatherMapTool::new(k),
             None => OpenWeatherMapTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PyOpenWeatherMapTool, "OpenWeatherMapTool()");
@@ -67,7 +71,9 @@ impl PyNewsApiTool {
             Some(k) => NewsApiTool::new(k),
             None => NewsApiTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PyNewsApiTool, "NewsApiTool()");
@@ -88,7 +94,9 @@ impl PyAlphaVantageTool {
             Some(k) => AlphaVantageTool::new(k),
             None => AlphaVantageTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PyAlphaVantageTool, "AlphaVantageTool()");

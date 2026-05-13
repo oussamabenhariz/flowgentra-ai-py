@@ -44,7 +44,7 @@ impl PyEvaluationNodeConfig {
         max_retries: u32,
         rubric: Option<String>,
     ) -> PyResult<Self> {
-        if min_confidence < 0.0 || min_confidence > 1.0 {
+        if !(0.0..=1.0).contains(&min_confidence) {
             return Err(crate::error::AgentExecutionError::new_err(
                 "min_confidence must be between 0.0 and 1.0",
             ));
@@ -116,7 +116,11 @@ pub(crate) struct EvaluationGraphNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for EvaluationGraphNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         let handler = Python::with_gil(|py| self.handler.clone_ref(py));
         let scorer = self
             .scorer
@@ -138,7 +142,8 @@ impl Node<DynState> for EvaluationGraphNode {
 
                 let update = py_result.downcast_bound::<PyDict>(py).map_err(|_| {
                     pyo3::exceptions::PyTypeError::new_err(format!(
-                        "EvaluationNode '{}' handler must return a dict", node_name
+                        "EvaluationNode '{}' handler must return a dict",
+                        node_name
                     ))
                 })?;
 
@@ -184,9 +189,7 @@ impl Node<DynState> for EvaluationGraphNode {
                 .unwrap_or((0.0, "Scorer error".to_string()))
             } else {
                 // Built-in heuristic: field must be non-null and non-empty
-                let output_val = field_state
-                    .as_ref()
-                    .and_then(|k| current_state.get(k));
+                let output_val = field_state.as_ref().and_then(|k| current_state.get(k));
                 let score: f64 = match output_val {
                     Some(v) if !v.is_null() => {
                         if let Some(s) = v.as_str() {
@@ -211,17 +214,17 @@ impl Node<DynState> for EvaluationGraphNode {
 
             // Store internal evaluation metadata into the working state
             current_state.set(
-                &format!("__eval_score__{}", self.name),
+                format!("__eval_score__{}", self.name),
                 serde_json::json!(score),
             );
             current_state.set(
-                &format!("__eval_attempt__{}", self.name),
+                format!("__eval_attempt__{}", self.name),
                 serde_json::json!(attempt),
             );
 
             if score >= min_confidence {
                 current_state.set(
-                    &format!("__eval_needs_retry__{}", self.name),
+                    format!("__eval_needs_retry__{}", self.name),
                     serde_json::json!(false),
                 );
                 // Return all keys from the accumulated state as the update
@@ -236,14 +239,14 @@ impl Node<DynState> for EvaluationGraphNode {
 
             // Inject feedback for next attempt (internal key — handlers can read it)
             current_state.set(
-                &format!("__eval_feedback__{}", self.name),
+                format!("__eval_feedback__{}", self.name),
                 serde_json::json!(feedback),
             );
         }
 
         // Max retries exhausted — return all accumulated state as update
         current_state.set(
-            &format!("__eval_needs_retry__{}", self.name),
+            format!("__eval_needs_retry__{}", self.name),
             serde_json::json!(false),
         );
         let mut update = DynStateUpdate::new();

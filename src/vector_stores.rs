@@ -19,13 +19,13 @@ use pyo3::types::PyDict;
 use std::sync::Arc;
 
 use flowgentra_ai::core::rag::{
-    AstraDbConfig, AstraDbStore, ElasticsearchConfig, ElasticsearchStore, FilterExpr,
-    MilvusStore, OpenSearchConfig, OpenSearchStore, PineconeStore, QdrantStore, RAGConfig,
-    UpstashVectorConfig, UpstashVectorStore, VectorStoreBackend, VectorStoreType, WeaviateStore,
+    AstraDbConfig, AstraDbStore, ElasticsearchConfig, ElasticsearchStore, FilterExpr, MilvusStore,
+    OpenSearchConfig, OpenSearchStore, PineconeStore, QdrantStore, RAGConfig, UpstashVectorConfig,
+    UpstashVectorStore, VectorStoreBackend, VectorStoreType, WeaviateStore,
 };
+use flowgentra_ai::core::rag::{MongoAtlasConfig, MongoAtlasVectorStore};
 use flowgentra_ai::core::rag::{PgVectorConfig, PgVectorStore};
 use flowgentra_ai::core::rag::{RedisVectorConfig, RedisVectorStore};
-use flowgentra_ai::core::rag::{MongoAtlasConfig, MongoAtlasVectorStore};
 
 use crate::error::to_py_err_generic;
 use crate::py_to_json;
@@ -57,13 +57,13 @@ fn extract_filter(filter: Option<&Bound<'_, PyDict>>) -> PyResult<Option<FilterE
                 let op: String = op_k.extract()?;
                 let val = py_to_json(&op_v)?;
                 let expr = match op.as_str() {
-                    "$eq"  => FilterExpr::Eq(key.clone(), val),
-                    "$ne"  => FilterExpr::Ne(key.clone(), val),
-                    "$gt"  => FilterExpr::Gt(key.clone(), val),
+                    "$eq" => FilterExpr::Eq(key.clone(), val),
+                    "$ne" => FilterExpr::Ne(key.clone(), val),
+                    "$gt" => FilterExpr::Gt(key.clone(), val),
                     "$gte" => FilterExpr::Gte(key.clone(), val),
-                    "$lt"  => FilterExpr::Lt(key.clone(), val),
+                    "$lt" => FilterExpr::Lt(key.clone(), val),
                     "$lte" => FilterExpr::Lte(key.clone(), val),
-                    "$in"  => {
+                    "$in" => {
                         let arr = val.as_array().cloned().unwrap_or_default();
                         FilterExpr::In(key.clone(), arr)
                     }
@@ -115,12 +115,7 @@ impl PyPineconeStore {
     ///     embedding_dim: Vector dimension (default 1536).
     #[new]
     #[pyo3(signature = (namespace, api_key, endpoint, embedding_dim = 1536))]
-    fn new(
-        namespace: &str,
-        api_key: &str,
-        endpoint: &str,
-        embedding_dim: usize,
-    ) -> PyResult<Self> {
+    fn new(namespace: &str, api_key: &str, endpoint: &str, embedding_dim: usize) -> PyResult<Self> {
         let config = RAGConfig {
             store_type: VectorStoreType::Pinecone,
             api_key: Some(api_key.to_string()),
@@ -129,7 +124,9 @@ impl PyPineconeStore {
             embedding_dim,
         };
         let store = crate::run_async(PineconeStore::new(config)).map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
     /// Index a document with its embedding vector.
@@ -150,7 +147,10 @@ impl PyPineconeStore {
         let mf = extract_filter(filter)?;
         let results = crate::run_async(self.inner.search(query_embedding, top_k, mf))
             .map_err(to_py_err_generic)?;
-        Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        Ok(results
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     /// Delete a document by ID.
@@ -192,12 +192,16 @@ impl PyPineconeStore {
         filter: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Vec<Vec<PySearchResult>>> {
         let mf = extract_filter(filter)?;
-        let all_results =
-            crate::run_async(self.inner.search_batch(query_embeddings, top_k, mf))
-                .map_err(to_py_err_generic)?;
+        let all_results = crate::run_async(self.inner.search_batch(query_embeddings, top_k, mf))
+            .map_err(to_py_err_generic)?;
         Ok(all_results
             .into_iter()
-            .map(|batch| batch.into_iter().map(|r| PySearchResult { inner: r }).collect())
+            .map(|batch| {
+                batch
+                    .into_iter()
+                    .map(|r| PySearchResult { inner: r })
+                    .collect()
+            })
             .collect())
     }
 
@@ -251,7 +255,9 @@ impl PyQdrantStore {
             embedding_dim,
         };
         let store = crate::run_async(QdrantStore::new(config)).map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
     fn index(&self, doc: &PyDocument, embedding: Vec<f32>) -> PyResult<()> {
@@ -270,7 +276,10 @@ impl PyQdrantStore {
         let mf = extract_filter(filter)?;
         let results = crate::run_async(self.inner.search(query_embedding, top_k, mf))
             .map_err(to_py_err_generic)?;
-        Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        Ok(results
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     fn delete(&self, doc_id: &str) -> PyResult<()> {
@@ -306,12 +315,16 @@ impl PyQdrantStore {
         filter: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Vec<Vec<PySearchResult>>> {
         let mf = extract_filter(filter)?;
-        let all_results =
-            crate::run_async(self.inner.search_batch(query_embeddings, top_k, mf))
-                .map_err(to_py_err_generic)?;
+        let all_results = crate::run_async(self.inner.search_batch(query_embeddings, top_k, mf))
+            .map_err(to_py_err_generic)?;
         Ok(all_results
             .into_iter()
-            .map(|batch| batch.into_iter().map(|r| PySearchResult { inner: r }).collect())
+            .map(|batch| {
+                batch
+                    .into_iter()
+                    .map(|r| PySearchResult { inner: r })
+                    .collect()
+            })
             .collect())
     }
 
@@ -365,7 +378,9 @@ impl PyWeaviateStore {
             embedding_dim,
         };
         let store = crate::run_async(WeaviateStore::new(config)).map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
     fn index(&self, doc: &PyDocument, embedding: Vec<f32>) -> PyResult<()> {
@@ -384,7 +399,10 @@ impl PyWeaviateStore {
         let mf = extract_filter(filter)?;
         let results = crate::run_async(self.inner.search(query_embedding, top_k, mf))
             .map_err(to_py_err_generic)?;
-        Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        Ok(results
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     fn delete(&self, doc_id: &str) -> PyResult<()> {
@@ -420,12 +438,16 @@ impl PyWeaviateStore {
         filter: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Vec<Vec<PySearchResult>>> {
         let mf = extract_filter(filter)?;
-        let all_results =
-            crate::run_async(self.inner.search_batch(query_embeddings, top_k, mf))
-                .map_err(to_py_err_generic)?;
+        let all_results = crate::run_async(self.inner.search_batch(query_embeddings, top_k, mf))
+            .map_err(to_py_err_generic)?;
         Ok(all_results
             .into_iter()
-            .map(|batch| batch.into_iter().map(|r| PySearchResult { inner: r }).collect())
+            .map(|batch| {
+                batch
+                    .into_iter()
+                    .map(|r| PySearchResult { inner: r })
+                    .collect()
+            })
             .collect())
     }
 
@@ -479,7 +501,9 @@ impl PyMilvusStore {
             embedding_dim,
         };
         let store = crate::run_async(MilvusStore::new(config)).map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
     fn index(&self, doc: &PyDocument, embedding: Vec<f32>) -> PyResult<()> {
@@ -498,7 +522,10 @@ impl PyMilvusStore {
         let mf = extract_filter(filter)?;
         let results = crate::run_async(self.inner.search(query_embedding, top_k, mf))
             .map_err(to_py_err_generic)?;
-        Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        Ok(results
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     fn delete(&self, doc_id: &str) -> PyResult<()> {
@@ -534,12 +561,16 @@ impl PyMilvusStore {
         filter: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Vec<Vec<PySearchResult>>> {
         let mf = extract_filter(filter)?;
-        let all_results =
-            crate::run_async(self.inner.search_batch(query_embeddings, top_k, mf))
-                .map_err(to_py_err_generic)?;
+        let all_results = crate::run_async(self.inner.search_batch(query_embeddings, top_k, mf))
+            .map_err(to_py_err_generic)?;
         Ok(all_results
             .into_iter()
-            .map(|batch| batch.into_iter().map(|r| PySearchResult { inner: r }).collect())
+            .map(|batch| {
+                batch
+                    .into_iter()
+                    .map(|r| PySearchResult { inner: r })
+                    .collect()
+            })
             .collect())
     }
 
@@ -573,7 +604,10 @@ macro_rules! impl_vector_store_pymethods {
                 let mf = extract_filter(filter)?;
                 let results = crate::run_async(self.inner.search(query_embedding, top_k, mf))
                     .map_err(to_py_err_generic)?;
-                Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+                Ok(results
+                    .into_iter()
+                    .map(|r| PySearchResult { inner: r })
+                    .collect())
             }
 
             fn delete(&self, doc_id: &str) -> PyResult<()> {
@@ -673,10 +707,14 @@ impl PyPgVectorStore {
             embedding_dim,
         }))
         .map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
-    fn __repr__(&self) -> String { "PgVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "PgVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyPgVectorStore);
@@ -718,10 +756,14 @@ impl PyRedisVectorStore {
             embedding_dim,
         }))
         .map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
-    fn __repr__(&self) -> String { "RedisVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "RedisVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyRedisVectorStore);
@@ -755,7 +797,12 @@ impl PyElasticsearchVectorStore {
     ///     api_key:       Optional API key for Elastic Cloud.
     #[new]
     #[pyo3(signature = (endpoint, index = "documents", embedding_dim = 1536, api_key = None))]
-    fn new(endpoint: &str, index: &str, embedding_dim: usize, api_key: Option<String>) -> PyResult<Self> {
+    fn new(
+        endpoint: &str,
+        index: &str,
+        embedding_dim: usize,
+        api_key: Option<String>,
+    ) -> PyResult<Self> {
         let store = crate::run_async(ElasticsearchStore::new(ElasticsearchConfig {
             endpoint: endpoint.to_string(),
             index: index.to_string(),
@@ -763,10 +810,14 @@ impl PyElasticsearchVectorStore {
             api_key,
         }))
         .map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
-    fn __repr__(&self) -> String { "ElasticsearchVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "ElasticsearchVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyElasticsearchVectorStore);
@@ -801,7 +852,13 @@ impl PyOpenSearchVectorStore {
     ///     password:      Basic auth password (default ``"admin"``).
     #[new]
     #[pyo3(signature = (endpoint, index = "documents", embedding_dim = 1536, username = "admin", password = "admin"))]
-    fn new(endpoint: &str, index: &str, embedding_dim: usize, username: &str, password: &str) -> PyResult<Self> {
+    fn new(
+        endpoint: &str,
+        index: &str,
+        embedding_dim: usize,
+        username: &str,
+        password: &str,
+    ) -> PyResult<Self> {
         let store = crate::run_async(OpenSearchStore::new(OpenSearchConfig {
             endpoint: endpoint.to_string(),
             index: index.to_string(),
@@ -810,10 +867,14 @@ impl PyOpenSearchVectorStore {
             password: Some(password.to_string()),
         }))
         .map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
-    fn __repr__(&self) -> String { "OpenSearchVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "OpenSearchVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyOpenSearchVectorStore);
@@ -848,10 +909,14 @@ impl PyUpstashVectorStore {
             url: url.to_string(),
             token: token.to_string(),
         });
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
-    fn __repr__(&self) -> String { "UpstashVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "UpstashVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyUpstashVectorStore);
@@ -888,7 +953,13 @@ impl PyAstraDbVectorStore {
     ///     embedding_dim: Vector dimension (default 1536).
     #[new]
     #[pyo3(signature = (endpoint, token, keyspace = "default_keyspace", collection = "documents", embedding_dim = 1536))]
-    fn new(endpoint: &str, token: &str, keyspace: &str, collection: &str, embedding_dim: usize) -> PyResult<Self> {
+    fn new(
+        endpoint: &str,
+        token: &str,
+        keyspace: &str,
+        collection: &str,
+        embedding_dim: usize,
+    ) -> PyResult<Self> {
         let store = crate::run_async(AstraDbStore::new(AstraDbConfig {
             endpoint: endpoint.to_string(),
             token: token.to_string(),
@@ -897,10 +968,14 @@ impl PyAstraDbVectorStore {
             embedding_dim,
         }))
         .map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
-    fn __repr__(&self) -> String { "AstraDbVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "AstraDbVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyAstraDbVectorStore);
@@ -940,7 +1015,13 @@ impl PyMongoAtlasVectorStore {
     ///     embedding_dim: Vector dimension (default 1536).
     #[new]
     #[pyo3(signature = (uri, database, collection, index_name = "vector_index", embedding_dim = 1536))]
-    fn new(uri: &str, database: &str, collection: &str, index_name: &str, embedding_dim: usize) -> PyResult<Self> {
+    fn new(
+        uri: &str,
+        database: &str,
+        collection: &str,
+        index_name: &str,
+        embedding_dim: usize,
+    ) -> PyResult<Self> {
         let store = crate::run_async(MongoAtlasVectorStore::connect(MongoAtlasConfig {
             uri: uri.to_string(),
             database: database.to_string(),
@@ -949,10 +1030,14 @@ impl PyMongoAtlasVectorStore {
             embedding_dim,
         }))
         .map_err(to_py_err_generic)?;
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
-    fn __repr__(&self) -> String { "MongoAtlasVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "MongoAtlasVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyMongoAtlasVectorStore);
@@ -987,11 +1072,15 @@ impl PyHnswVectorStore {
     #[new]
     fn new(embedding_dim: usize) -> Self {
         Self {
-            inner: Arc::new(flowgentra_ai::core::rag::HnswVectorStore::new(embedding_dim)),
+            inner: Arc::new(flowgentra_ai::core::rag::HnswVectorStore::new(
+                embedding_dim,
+            )),
         }
     }
 
-    fn __repr__(&self) -> String { "HnswVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "HnswVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyHnswVectorStore);
@@ -1038,7 +1127,9 @@ impl PySingleStoreVectorStore {
         }
     }
 
-    fn __repr__(&self) -> String { "SingleStoreVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "SingleStoreVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PySingleStoreVectorStore);
@@ -1083,7 +1174,9 @@ impl PyAzureAISearchStore {
         }
     }
 
-    fn __repr__(&self) -> String { "AzureAISearchStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "AzureAISearchStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyAzureAISearchStore);
@@ -1122,7 +1215,9 @@ impl PyVectaraStore {
         Self {
             inner: Arc::new(
                 flowgentra_ai::core::rag::extra_vector_stores::VectaraStore::new(
-                    customer_id, corpus_id, api_key,
+                    customer_id,
+                    corpus_id,
+                    api_key,
                 ),
             ),
         }
@@ -1137,12 +1232,17 @@ impl PyVectaraStore {
     ///     top_k:  Maximum number of results to return.
     #[pyo3(signature = (query, top_k = 5))]
     fn search_text(&self, query: &str, top_k: usize) -> PyResult<Vec<PySearchResult>> {
-        let results = crate::run_async(self.inner.search_text(query, top_k))
-            .map_err(to_py_err_generic)?;
-        Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        let results =
+            crate::run_async(self.inner.search_text(query, top_k)).map_err(to_py_err_generic)?;
+        Ok(results
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
-    fn __repr__(&self) -> String { "VectaraStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "VectaraStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyVectaraStore);
@@ -1185,7 +1285,9 @@ impl PyTurbopufferStore {
         }
     }
 
-    fn __repr__(&self) -> String { "TurbopufferStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "TurbopufferStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyTurbopufferStore);
@@ -1225,22 +1327,20 @@ impl PyNeo4jVectorStore {
     ///     node_label: Node label for documents (default ``"Document"``).
     #[new]
     #[pyo3(signature = (url, username, password, index_name = "vector_index", node_label = "Document"))]
-    fn new(
-        url: &str,
-        username: &str,
-        password: &str,
-        index_name: &str,
-        node_label: &str,
-    ) -> Self {
+    fn new(url: &str, username: &str, password: &str, index_name: &str, node_label: &str) -> Self {
         let store = flowgentra_ai::core::rag::extra_vector_stores::Neo4jVectorStore::new(
             url, username, password,
         )
         .with_index(index_name)
         .with_node_label(node_label);
-        Self { inner: Arc::new(store) }
+        Self {
+            inner: Arc::new(store),
+        }
     }
 
-    fn __repr__(&self) -> String { "Neo4jVectorStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "Neo4jVectorStore(...)".to_string()
+    }
 }
 
 impl_vector_store_pymethods!(PyNeo4jVectorStore);

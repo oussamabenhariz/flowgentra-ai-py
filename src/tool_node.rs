@@ -6,8 +6,8 @@ use std::sync::Arc;
 use flowgentra_ai::core::state::DynState;
 use flowgentra_ai::core::state_graph::node::Node;
 
-use crate::state::PyState;
 use crate::llm::PyMessage;
+use crate::state::PyState;
 
 /// Create a tool execution node from a Python callable.
 ///
@@ -40,7 +40,8 @@ impl Node<DynState> for DynToolNode {
         &self,
         state: &DynState,
         _ctx: &flowgentra_ai::core::state::Context,
-    ) -> flowgentra_ai::core::state_graph::error::Result<flowgentra_ai::core::state::DynStateUpdate> {
+    ) -> flowgentra_ai::core::state_graph::error::Result<flowgentra_ai::core::state::DynStateUpdate>
+    {
         use flowgentra_ai::core::state::DynStateUpdate;
 
         // Read tool_calls from state (array of {id, name, arguments})
@@ -54,9 +55,20 @@ impl Node<DynState> for DynToolNode {
         let mut messages: Vec<serde_json::Value> = Vec::new();
 
         for tc in &tool_calls {
-            let name = tc.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let args = tc.get("arguments").cloned().unwrap_or(serde_json::json!({}));
-            let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let name = tc
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let args = tc
+                .get("arguments")
+                .cloned()
+                .unwrap_or(serde_json::json!({}));
+            let id = tc
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
 
             let result = Python::with_gil(|py| -> Result<String, String> {
                 let py_args = crate::json_to_py(py, &args).map_err(|e| format!("{}", e))?;
@@ -142,11 +154,13 @@ pub fn py_store_tool_calls(state: &PyState, message: &PyMessage) -> PyState {
         .as_ref()
         .map(|tcs| {
             tcs.iter()
-                .map(|tc| serde_json::json!({
-                    "id": tc.id,
-                    "name": tc.name,
-                    "arguments": tc.arguments
-                }))
+                .map(|tc| {
+                    serde_json::json!({
+                        "id": tc.id,
+                        "name": tc.name,
+                        "arguments": tc.arguments
+                    })
+                })
                 .collect()
         })
         .unwrap_or_default();

@@ -35,7 +35,10 @@ impl PyVisualizationConfig {
     }
 
     fn __repr__(&self) -> String {
-        format!("VisualizationConfig(output_path='{}')", self.inner.output_path)
+        format!(
+            "VisualizationConfig(output_path='{}')",
+            self.inner.output_path
+        )
     }
 }
 

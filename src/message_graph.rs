@@ -29,9 +29,7 @@ impl PyMessageGraph {
     fn invoke(&self, messages: Vec<PyMessage>) -> PyResult<Vec<PyMessage>> {
         let msgs: Vec<Message> = messages.into_iter().map(|m| m.inner).collect();
         let initial = MessageState::new(msgs);
-        let result = 
-            crate::run_async(self.inner.invoke(initial))
-            .map_err(to_py_err_generic)?;
+        let result = crate::run_async(self.inner.invoke(initial)).map_err(to_py_err_generic)?;
         Ok(result
             .messages
             .into_iter()
@@ -98,7 +96,7 @@ impl PyMessageGraphBuilder {
     /// The callable receives a list of Messages and must return a list of Messages.
     /// Returned messages are appended to the conversation.
     fn add_node(&mut self, name: &str, func: PyObject) {
-        let builder = self.inner.take().unwrap_or_else(MessageGraphBuilder::new);
+        let builder = self.inner.take().unwrap_or_default();
         let func_clone = Python::with_gil(|py| func.clone_ref(py));
         let node_name = name.to_string();
 
@@ -111,7 +109,10 @@ impl PyMessageGraphBuilder {
 
                 Box::pin(async move {
                     Python::with_gil(
-                        |py| -> Result<MessageStateUpdate, flowgentra_ai::core::state_graph::StateGraphError> {
+                        |py| -> Result<
+                            MessageStateUpdate,
+                            flowgentra_ai::core::state_graph::StateGraphError,
+                        > {
                             let py_messages: Vec<PyMessage> = messages
                                 .into_iter()
                                 .map(|m| PyMessage { inner: m })
@@ -145,19 +146,19 @@ impl PyMessageGraphBuilder {
 
     /// Add a fixed edge.
     fn add_edge(&mut self, from_node: &str, to_node: &str) {
-        let builder = self.inner.take().unwrap_or_else(MessageGraphBuilder::new);
+        let builder = self.inner.take().unwrap_or_default();
         self.inner = Some(builder.add_edge(from_node, to_node));
     }
 
     /// Set the entry point.
     fn set_entry_point(&mut self, name: &str) {
-        let builder = self.inner.take().unwrap_or_else(MessageGraphBuilder::new);
+        let builder = self.inner.take().unwrap_or_default();
         self.inner = Some(builder.set_entry_point(name));
     }
 
     /// Compile the graph.
     fn compile(&mut self) -> PyResult<PyMessageGraph> {
-        let builder = self.inner.take().unwrap_or_else(MessageGraphBuilder::new);
+        let builder = self.inner.take().unwrap_or_default();
         let graph = builder.compile().map_err(to_py_err_generic)?;
         Ok(PyMessageGraph { inner: graph })
     }

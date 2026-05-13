@@ -23,23 +23,28 @@ use flowgentra_ai::core::rag::{
     compression_retriever::{DocumentCompressor, EmbeddingsFilter, LLMCompressor},
     ensemble_retriever::{AsyncRetriever, VectorRetriever},
     filter::MetadataFilter,
-    multi_vector_retriever::{MultiVectorConfig, MultiVectorParent, MultiVectorRetriever, VectorView},
+    multi_vector_retriever::{
+        MultiVectorConfig, MultiVectorParent, MultiVectorRetriever, VectorView,
+    },
     parent_doc_retriever::{ParentDocConfig, ParentDocument, ParentDocumentRetriever},
     reorder::{reorder_for_long_context, ReorderStrategy},
+    retrievers::RetrievalConfig,
     self_query_retriever::{filter_from_json_object, SelfQueryConfig},
     time_weighted_retriever::{TimeWeightedConfig, TimeWeightedRetriever},
     vector_db::{SearchResult, VectorStoreError},
-    retrievers::RetrievalConfig,
 };
 
-use crate::run_async;
 use crate::rag::PySearchResult;
+use crate::run_async;
 use crate::vector_store::{PyEmbeddings, PyInMemoryVectorStore};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 fn to_py_results(results: Vec<SearchResult>) -> Vec<PySearchResult> {
-    results.into_iter().map(|r| PySearchResult { inner: r }).collect()
+    results
+        .into_iter()
+        .map(|r| PySearchResult { inner: r })
+        .collect()
 }
 
 fn to_py_err(e: VectorStoreError) -> PyErr {
@@ -72,7 +77,11 @@ impl PyBm25Retriever {
     #[pyo3(signature = (top_k=5, score_threshold=0.0, preprocess=true))]
     fn new(top_k: usize, score_threshold: f32, preprocess: bool) -> Self {
         Self {
-            inner: Bm25Retriever::new(Bm25Config { top_k, score_threshold, preprocess }),
+            inner: Bm25Retriever::new(Bm25Config {
+                top_k,
+                score_threshold,
+                preprocess,
+            }),
         }
     }
 
@@ -83,7 +92,11 @@ impl PyBm25Retriever {
         Self {
             inner: Bm25Retriever::from_texts(
                 texts,
-                Bm25Config { top_k, score_threshold, preprocess: true },
+                Bm25Config {
+                    top_k,
+                    score_threshold,
+                    preprocess: true,
+                },
             ),
         }
     }
@@ -92,7 +105,11 @@ impl PyBm25Retriever {
     fn add_texts(&mut self, texts: Vec<(String, String)>) {
         let docs = texts
             .into_iter()
-            .map(|(id, text)| Bm25Document { id, text, metadata: HashMap::new() })
+            .map(|(id, text)| Bm25Document {
+                id,
+                text,
+                metadata: HashMap::new(),
+            })
             .collect();
         self.inner.add_documents(docs);
     }
@@ -102,7 +119,9 @@ impl PyBm25Retriever {
         to_py_results(self.inner.retrieve(query))
     }
 
-    fn __repr__(&self) -> String { "Bm25Retriever(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "Bm25Retriever(...)".to_string()
+    }
 }
 
 // ── PyVectorRetriever ─────────────────────────────────────────────────────────
@@ -146,7 +165,9 @@ impl PyVectorRetriever {
         Ok(to_py_results(results))
     }
 
-    fn __repr__(&self) -> String { "VectorRetriever(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "VectorRetriever(...)".to_string()
+    }
 }
 
 // ── PyEnsembleRetriever ───────────────────────────────────────────────────────
@@ -217,15 +238,28 @@ impl PyEnsembleRetriever {
 
         let mut out: Vec<SearchResult> = scores
             .into_iter()
-            .map(|(id, (score, text, metadata))| SearchResult { id, text, score, metadata })
+            .map(|(id, (score, text, metadata))| SearchResult {
+                id,
+                text,
+                score,
+                metadata,
+            })
             .collect();
-        out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        out.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         out.truncate(self.top_k);
         Ok(to_py_results(out))
     }
 
     fn __repr__(&self) -> String {
-        format!("EnsembleRetriever(n={}, top_k={})", self.retrievers.len(), self.top_k)
+        format!(
+            "EnsembleRetriever(n={}, top_k={})",
+            self.retrievers.len(),
+            self.top_k
+        )
     }
 }
 
@@ -343,7 +377,9 @@ impl PyMultiQueryRetriever {
             let results: Vec<PyRef<PySearchResult>> = py_res.extract(py)?;
             for r in results.iter() {
                 if seen.insert(r.inner.id.clone()) {
-                    merged.push(PySearchResult { inner: r.inner.clone() });
+                    merged.push(PySearchResult {
+                        inner: r.inner.clone(),
+                    });
                 }
             }
         }
@@ -352,7 +388,10 @@ impl PyMultiQueryRetriever {
     }
 
     fn __repr__(&self) -> String {
-        format!("MultiQueryRetriever(model='{}', num_queries={})", self.model, self.num_queries)
+        format!(
+            "MultiQueryRetriever(model='{}', num_queries={})",
+            self.model, self.num_queries
+        )
     }
 }
 
@@ -380,7 +419,11 @@ impl PyScoreThresholdRetriever {
     #[new]
     #[pyo3(signature = (base_retriever, min_score=0.75, top_k=5))]
     fn new(base_retriever: PyObject, min_score: f32, top_k: usize) -> Self {
-        Self { base: base_retriever, min_score, top_k }
+        Self {
+            base: base_retriever,
+            min_score,
+            top_k,
+        }
     }
 
     /// Retrieve and filter by minimum similarity score.
@@ -390,14 +433,19 @@ impl PyScoreThresholdRetriever {
         let mut filtered: Vec<PySearchResult> = results
             .iter()
             .filter(|r| r.inner.score >= self.min_score)
-            .map(|r| PySearchResult { inner: r.inner.clone() })
+            .map(|r| PySearchResult {
+                inner: r.inner.clone(),
+            })
             .collect();
         filtered.truncate(self.top_k);
         Ok(filtered)
     }
 
     fn __repr__(&self) -> String {
-        format!("ScoreThresholdRetriever(min_score={}, top_k={})", self.min_score, self.top_k)
+        format!(
+            "ScoreThresholdRetriever(min_score={}, top_k={})",
+            self.min_score, self.top_k
+        )
     }
 }
 
@@ -428,7 +476,9 @@ impl PyEmbeddingsFilter {
         }
     }
 
-    fn __repr__(&self) -> String { "EmbeddingsFilter(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "EmbeddingsFilter(...)".to_string()
+    }
 }
 
 // ── PyContextualCompressionRetriever ─────────────────────────────────────────
@@ -458,7 +508,11 @@ impl PyContextualCompressionRetriever {
     #[new]
     #[pyo3(signature = (base_retriever, compressor, top_k=5))]
     fn new(base_retriever: PyObject, compressor: &PyEmbeddingsFilter, top_k: usize) -> Self {
-        Self { base: base_retriever, compressor: compressor.inner.clone(), top_k }
+        Self {
+            base: base_retriever,
+            compressor: compressor.inner.clone(),
+            top_k,
+        }
     }
 
     /// Retrieve then filter by embedding similarity.
@@ -475,7 +529,9 @@ impl PyContextualCompressionRetriever {
         Ok(to_py_results(compressed))
     }
 
-    fn __repr__(&self) -> String { "ContextualCompressionRetriever(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "ContextualCompressionRetriever(...)".to_string()
+    }
 }
 
 // ── PyTimeWeightedRetriever ───────────────────────────────────────────────────
@@ -543,7 +599,9 @@ impl PyTimeWeightedRetriever {
         Ok(to_py_results(results))
     }
 
-    fn __repr__(&self) -> String { "TimeWeightedRetriever(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "TimeWeightedRetriever(...)".to_string()
+    }
 }
 
 // ── PyVectorView ──────────────────────────────────────────────────────────────
@@ -561,29 +619,43 @@ pub struct PyVectorView {
 impl PyVectorView {
     /// Small chunks of the parent's raw text (auto-split).
     #[staticmethod]
-    fn chunk() -> Self { Self { inner: VectorView::Chunk } }
+    fn chunk() -> Self {
+        Self {
+            inner: VectorView::Chunk,
+        }
+    }
 
     /// Hand-written or LLM-generated summary.
     #[staticmethod]
-    fn summary(text: String) -> Self { Self { inner: VectorView::Summary(text) } }
+    fn summary(text: String) -> Self {
+        Self {
+            inner: VectorView::Summary(text),
+        }
+    }
 
     /// Hypothetical questions the document answers.
     #[staticmethod]
     fn hypothetical_questions(questions: Vec<String>) -> Self {
-        Self { inner: VectorView::HypotheticalQuestions(questions) }
+        Self {
+            inner: VectorView::HypotheticalQuestions(questions),
+        }
     }
 
     /// Custom tagged text representation.
     #[staticmethod]
     fn custom(tag: String, text: String) -> Self {
-        Self { inner: VectorView::Custom { tag, text } }
+        Self {
+            inner: VectorView::Custom { tag, text },
+        }
     }
 
     fn __repr__(&self) -> String {
         match &self.inner {
             VectorView::Chunk => "VectorView.Chunk".to_string(),
             VectorView::Summary(_) => "VectorView.Summary(...)".to_string(),
-            VectorView::HypotheticalQuestions(_) => "VectorView.HypotheticalQuestions(...)".to_string(),
+            VectorView::HypotheticalQuestions(_) => {
+                "VectorView.HypotheticalQuestions(...)".to_string()
+            }
             VectorView::Custom { tag, .. } => format!("VectorView.Custom(tag='{tag}')"),
         }
     }
@@ -658,19 +730,21 @@ impl PyMultiVectorRetriever {
                 .collect(),
         };
         let rust_views: Vec<VectorView> = views.iter().map(|v| v.inner.clone()).collect();
-        run_async(async move { inner.add_with_views(parent, rust_views).await })
-            .map_err(to_py_err)
+        run_async(async move { inner.add_with_views(parent, rust_views).await }).map_err(to_py_err)
     }
 
     /// Retrieve parent documents matching ``query``.
     fn retrieve(&self, query: &str) -> PyResult<Vec<PySearchResult>> {
         let inner = self.inner.clone();
         let q = query.to_string();
-        let results = run_async(async move { inner.retrieve_as_results(&q).await }).map_err(to_py_err)?;
+        let results =
+            run_async(async move { inner.retrieve_as_results(&q).await }).map_err(to_py_err)?;
         Ok(to_py_results(results))
     }
 
-    fn __repr__(&self) -> String { "MultiVectorRetriever(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "MultiVectorRetriever(...)".to_string()
+    }
 }
 
 // ── PyParentDocumentRetriever ─────────────────────────────────────────────────
@@ -729,7 +803,10 @@ impl PyParentDocumentRetriever {
     ///
     /// Args:
     ///     documents: List of ``(id, text, metadata_dict)`` tuples.
-    fn add_documents(&self, documents: Vec<(String, String, HashMap<String, String>)>) -> PyResult<()> {
+    fn add_documents(
+        &self,
+        documents: Vec<(String, String, HashMap<String, String>)>,
+    ) -> PyResult<()> {
         let inner = self.inner.clone();
         let parent_docs: Vec<ParentDocument> = documents
             .into_iter()
@@ -749,11 +826,14 @@ impl PyParentDocumentRetriever {
     fn retrieve(&self, query: &str) -> PyResult<Vec<PySearchResult>> {
         let inner = self.inner.clone();
         let q = query.to_string();
-        let results = run_async(async move { inner.retrieve_as_results(&q).await }).map_err(to_py_err)?;
+        let results =
+            run_async(async move { inner.retrieve_as_results(&q).await }).map_err(to_py_err)?;
         Ok(to_py_results(results))
     }
 
-    fn __repr__(&self) -> String { "ParentDocumentRetriever(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "ParentDocumentRetriever(...)".to_string()
+    }
 }
 
 // ── PyReorderStrategy ─────────────────────────────────────────────────────────
@@ -771,15 +851,27 @@ pub struct PyReorderStrategy {
 impl PyReorderStrategy {
     /// Best docs at start/end, worst in middle (recommended).
     #[staticmethod]
-    fn lost_in_the_middle() -> Self { Self { inner: ReorderStrategy::LostInTheMiddle } }
+    fn lost_in_the_middle() -> Self {
+        Self {
+            inner: ReorderStrategy::LostInTheMiddle,
+        }
+    }
 
     /// Leave in original score order (no-op).
     #[staticmethod]
-    fn none() -> Self { Self { inner: ReorderStrategy::None } }
+    fn none() -> Self {
+        Self {
+            inner: ReorderStrategy::None,
+        }
+    }
 
     /// Reverse order (worst first).
     #[staticmethod]
-    fn reverse() -> Self { Self { inner: ReorderStrategy::Reverse } }
+    fn reverse() -> Self {
+        Self {
+            inner: ReorderStrategy::Reverse,
+        }
+    }
 
     fn __repr__(&self) -> String {
         match self.inner {
@@ -811,7 +903,9 @@ pub fn py_reorder_for_long_context(
     results: Vec<PyRef<PySearchResult>>,
     strategy: Option<&PyReorderStrategy>,
 ) -> Vec<PySearchResult> {
-    let strat = strategy.map(|s| s.inner).unwrap_or(ReorderStrategy::LostInTheMiddle);
+    let strat = strategy
+        .map(|s| s.inner)
+        .unwrap_or(ReorderStrategy::LostInTheMiddle);
     let docs: Vec<SearchResult> = results.iter().map(|r| r.inner.clone()).collect();
     to_py_results(reorder_for_long_context(docs, strat))
 }
@@ -909,19 +1003,26 @@ impl PySelfQueryRetriever {
         let q = query.to_string();
 
         let results = run_async(async move {
-            let emb = embeddings.embed(&q).await
+            let emb = embeddings
+                .embed(&q)
+                .await
                 .map_err(|e| VectorStoreError::Unknown(format!("Embed error: {e}")))?;
             let mut results = store.search(emb, top_k, filter).await?;
             results.retain(|r| r.score >= threshold);
             results.truncate(top_k);
             Ok::<Vec<SearchResult>, VectorStoreError>(results)
-        }).map_err(to_py_err)?;
+        })
+        .map_err(to_py_err)?;
 
         Ok(to_py_results(results))
     }
 
     /// Same as retrieve() but also returns whether a filter was extracted (True/False).
-    fn retrieve_with_filter(&self, py: Python<'_>, query: &str) -> PyResult<(Vec<PySearchResult>, PyObject)> {
+    fn retrieve_with_filter(
+        &self,
+        py: Python<'_>,
+        query: &str,
+    ) -> PyResult<(Vec<PySearchResult>, PyObject)> {
         let filter = self.call_extractor(query)?;
         let had_filter = filter.is_some();
         let py_filter = had_filter.into_py(py);
@@ -937,13 +1038,16 @@ impl PySelfQueryRetriever {
         let q = query.to_string();
 
         let results = run_async(async move {
-            let emb = embeddings.embed(&q).await
+            let emb = embeddings
+                .embed(&q)
+                .await
                 .map_err(|e| VectorStoreError::Unknown(format!("Embed error: {e}")))?;
             let mut results = store.search(emb, top_k, filter).await?;
             results.retain(|r| r.score >= threshold);
             results.truncate(top_k);
             Ok::<Vec<SearchResult>, VectorStoreError>(results)
-        }).map_err(to_py_err)?;
+        })
+        .map_err(to_py_err)?;
 
         Ok((to_py_results(results), py_filter))
     }
@@ -998,13 +1102,16 @@ impl PyLLMCompressor {
     ///
     /// Returns:
     ///     Filtered/compressed list.
-    fn compress(&self, query: &str, documents: Vec<PyRef<PySearchResult>>) -> PyResult<Vec<PySearchResult>> {
+    fn compress(
+        &self,
+        query: &str,
+        documents: Vec<PyRef<PySearchResult>>,
+    ) -> PyResult<Vec<PySearchResult>> {
         let compressor = self.inner.clone();
         let docs: Vec<SearchResult> = documents.iter().map(|r| r.inner.clone()).collect();
         let q = query.to_string();
-        let results = run_async(async move {
-            compressor.compress(&q, docs).await
-        }).map_err(to_py_err)?;
+        let results =
+            run_async(async move { compressor.compress(&q, docs).await }).map_err(to_py_err)?;
         Ok(to_py_results(results))
     }
 
@@ -1042,11 +1149,13 @@ impl PyDocumentCompressorPipeline {
     }
 
     /// Run all compressors in sequence.
-    fn compress(&self, py: Python<'_>, query: &str, documents: Vec<PyRef<PySearchResult>>) -> PyResult<Vec<PyObject>> {
-        let mut current: Vec<PyObject> = documents
-            .iter()
-            .map(|r| r.clone().into_py(py))
-            .collect();
+    fn compress(
+        &self,
+        py: Python<'_>,
+        query: &str,
+        documents: Vec<PyRef<PySearchResult>>,
+    ) -> PyResult<Vec<PyObject>> {
+        let mut current: Vec<PyObject> = documents.iter().map(|r| r.into_py(py)).collect();
 
         for compressor in &self.compressors {
             if current.is_empty() {

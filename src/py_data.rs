@@ -23,7 +23,9 @@ macro_rules! impl_tool {
                     .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
                 json_to_py(py, &val)
             }
-            fn __repr__(&self) -> String { $repr.to_string() }
+            fn __repr__(&self) -> String {
+                $repr.to_string()
+            }
         }
     };
 }
@@ -36,7 +38,11 @@ pub struct PyJsonGetValueTool {
 #[pymethods]
 impl PyJsonGetValueTool {
     #[new]
-    fn new() -> Self { Self { inner: Arc::new(JsonGetValueTool) } }
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(JsonGetValueTool),
+        }
+    }
 }
 impl_tool!(PyJsonGetValueTool, "JsonGetValueTool()");
 
@@ -48,7 +54,11 @@ pub struct PyJsonListKeysTool {
 #[pymethods]
 impl PyJsonListKeysTool {
     #[new]
-    fn new() -> Self { Self { inner: Arc::new(JsonListKeysTool) } }
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(JsonListKeysTool),
+        }
+    }
 }
 impl_tool!(PyJsonListKeysTool, "JsonListKeysTool()");
 
@@ -60,6 +70,10 @@ pub struct PyCsvQueryTool {
 #[pymethods]
 impl PyCsvQueryTool {
     #[new]
-    fn new() -> Self { Self { inner: Arc::new(CsvQueryTool) } }
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(CsvQueryTool),
+        }
+    }
 }
 impl_tool!(PyCsvQueryTool, "CsvQueryTool()");

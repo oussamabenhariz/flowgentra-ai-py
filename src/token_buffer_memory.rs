@@ -162,10 +162,12 @@ impl PySummaryMemory {
         llm: Option<&PyLLM>,
         summary_threshold: Option<usize>,
     ) -> PyResult<Self> {
-        let rust_config = config.map(|c| c.inner.clone()).unwrap_or_else(|| SummaryConfig {
-            buffer_size: summary_threshold.unwrap_or(10),
-            max_summary_tokens: 200,
-        });
+        let rust_config = config
+            .map(|c| c.inner.clone())
+            .unwrap_or_else(|| SummaryConfig {
+                buffer_size: summary_threshold.unwrap_or(10),
+                max_summary_tokens: 200,
+            });
 
         // Priority: explicit llm arg > explicit summarize_fn > llm from config > no-op
         let effective_llm: Option<Arc<dyn flowgentra_ai::core::llm::LLM>> = llm
@@ -184,14 +186,16 @@ impl PySummaryMemory {
                     Python::with_gil(
                         |py| -> Result<String, flowgentra_ai::core::error::FlowgentraError> {
                             let res = func.call1(py, (text,)).map_err(|e| {
-                                flowgentra_ai::core::error::FlowgentraError::ToolError(
-                                    format!("summarize_fn error: {}", e),
-                                )
+                                flowgentra_ai::core::error::FlowgentraError::ToolError(format!(
+                                    "summarize_fn error: {}",
+                                    e
+                                ))
                             })?;
                             res.extract::<String>(py).map_err(|e| {
-                                flowgentra_ai::core::error::FlowgentraError::ToolError(
-                                    format!("summarize_fn must return str: {}", e),
-                                )
+                                flowgentra_ai::core::error::FlowgentraError::ToolError(format!(
+                                    "summarize_fn must return str: {}",
+                                    e
+                                ))
                             })
                         },
                     )

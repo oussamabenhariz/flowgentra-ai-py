@@ -29,10 +29,14 @@ pub struct PyExecutionMetrics {
 #[pymethods]
 impl PyExecutionMetrics {
     #[getter]
-    fn get_nodes_executed(&self) -> usize { self.nodes_executed }
+    fn get_nodes_executed(&self) -> usize {
+        self.nodes_executed
+    }
 
     #[getter]
-    fn get_errors(&self) -> usize { self.errors }
+    fn get_errors(&self) -> usize {
+        self.errors
+    }
 
     #[getter]
     fn get_node_timings(&self, py: Python<'_>) -> PyObject {
@@ -50,7 +54,11 @@ impl PyExecutionMetrics {
     /// Average timing in milliseconds for a specific node, or None.
     fn avg_timing(&self, node: &str) -> Option<u128> {
         self.node_timings.get(node).and_then(|t| {
-            if t.is_empty() { None } else { Some(t.iter().sum::<u128>() / t.len() as u128) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.iter().sum::<u128>() / t.len() as u128)
+            }
         })
     }
 
@@ -87,7 +95,9 @@ impl PyLoggingMiddleware {
         } else {
             LoggingMiddleware::new()
         };
-        PyLoggingMiddleware { inner: Arc::new(mw) }
+        PyLoggingMiddleware {
+            inner: Arc::new(mw),
+        }
     }
 
     fn __repr__(&self) -> &'static str {
@@ -122,7 +132,9 @@ pub struct PyMetricsMiddleware {
 impl PyMetricsMiddleware {
     #[new]
     fn new() -> Self {
-        PyMetricsMiddleware { inner: Arc::new(MetricsMiddleware::new()) }
+        PyMetricsMiddleware {
+            inner: Arc::new(MetricsMiddleware::new()),
+        }
     }
 
     /// Return the collected metrics (blocking — safe from Python call context).
@@ -159,7 +171,10 @@ pub(crate) struct PyObjectMiddleware {
 impl PyObjectMiddleware {
     pub fn new(obj: PyObject, name: Option<String>) -> Self {
         let middleware_name = name.unwrap_or_else(|| "PyMiddleware".to_string());
-        PyObjectMiddleware { obj, middleware_name }
+        PyObjectMiddleware {
+            obj,
+            middleware_name,
+        }
     }
 }
 
@@ -183,7 +198,8 @@ async fn call_py_hook(
                 let m = obj.getattr(py, method)?;
                 let result = m.call1(py, (&node_name, state_dict))?;
                 result.extract(py)
-            }).ok()
+            })
+            .ok()
         }
     })
     .await
@@ -200,24 +216,37 @@ async fn call_py_hook(
 
 #[async_trait]
 impl Middleware<DynState> for PyObjectMiddleware {
-    async fn before_node(&self, ctx: &mut ExecutionContext<DynState>) -> MiddlewareResult<DynState> {
-        let has_method = Python::with_gil(|py| {
-            self.obj.bind(py).hasattr("before_node").unwrap_or(false)
-        });
+    async fn before_node(
+        &self,
+        ctx: &mut ExecutionContext<DynState>,
+    ) -> MiddlewareResult<DynState> {
+        let has_method =
+            Python::with_gil(|py| self.obj.bind(py).hasattr("before_node").unwrap_or(false));
         if !has_method {
             return MiddlewareResult::Continue;
         }
-        call_py_hook(&self.obj, "before_node", ctx.node_name.clone(), ctx.state.clone()).await
+        call_py_hook(
+            &self.obj,
+            "before_node",
+            ctx.node_name.clone(),
+            ctx.state.clone(),
+        )
+        .await
     }
 
     async fn after_node(&self, ctx: &mut ExecutionContext<DynState>) -> MiddlewareResult<DynState> {
-        let has_method = Python::with_gil(|py| {
-            self.obj.bind(py).hasattr("after_node").unwrap_or(false)
-        });
+        let has_method =
+            Python::with_gil(|py| self.obj.bind(py).hasattr("after_node").unwrap_or(false));
         if !has_method {
             return MiddlewareResult::Continue;
         }
-        call_py_hook(&self.obj, "after_node", ctx.node_name.clone(), ctx.state.clone()).await
+        call_py_hook(
+            &self.obj,
+            "after_node",
+            ctx.node_name.clone(),
+            ctx.state.clone(),
+        )
+        .await
     }
 
     fn name(&self) -> &str {

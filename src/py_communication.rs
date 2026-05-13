@@ -23,7 +23,9 @@ macro_rules! impl_tool {
                     .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
                 json_to_py(py, &val)
             }
-            fn __repr__(&self) -> String { $repr.to_string() }
+            fn __repr__(&self) -> String {
+                $repr.to_string()
+            }
         }
     };
 }
@@ -42,7 +44,9 @@ impl PyGmailTool {
             Some(t) => GmailTool::new(t),
             None => GmailTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PyGmailTool, "GmailTool()");
@@ -61,7 +65,9 @@ impl PySlackTool {
             Some(t) => SlackTool::new(t),
             None => SlackTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PySlackTool, "SlackTool()");

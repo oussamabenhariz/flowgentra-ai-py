@@ -56,7 +56,6 @@ use flowgentra_ai::core::tools::ToolRegistry;
 
 use crate::error::to_py_err;
 use crate::llm::{PyLLM, PyToolDefinition};
-use crate::tool_registry::PyToolRegistry;
 
 // ─── PyAgentType ────────────────────────────────────────────────────────────
 
@@ -72,25 +71,33 @@ impl PyAgentType {
     /// Zero-shot ReAct agent (reasoning + action without examples).
     #[staticmethod]
     fn zero_shot_react() -> Self {
-        PyAgentType { inner: AgentType::ZeroShotReAct }
+        PyAgentType {
+            inner: AgentType::ZeroShotReAct,
+        }
     }
 
     /// Few-shot ReAct agent (with example demonstrations).
     #[staticmethod]
     fn few_shot_react() -> Self {
-        PyAgentType { inner: AgentType::FewShotReAct }
+        PyAgentType {
+            inner: AgentType::FewShotReAct,
+        }
     }
 
     /// Conversational agent (multi-turn dialogue with memory).
     #[staticmethod]
     fn conversational() -> Self {
-        PyAgentType { inner: AgentType::Conversational }
+        PyAgentType {
+            inner: AgentType::Conversational,
+        }
     }
 
     /// Tool Calling agent — uses the provider's native function/tool-calling API.
     #[staticmethod]
     fn tool_calling() -> Self {
-        PyAgentType { inner: AgentType::ToolCalling }
+        PyAgentType {
+            inner: AgentType::ToolCalling,
+        }
     }
 
     /// Structured Chat Zero-Shot ReAct agent — ReAct with JSON-blob actions.
@@ -104,13 +111,17 @@ impl PyAgentType {
     /// Self Ask With Search agent — decomposes questions into sub-questions.
     #[staticmethod]
     fn self_ask_with_search() -> Self {
-        PyAgentType { inner: AgentType::SelfAskWithSearch }
+        PyAgentType {
+            inner: AgentType::SelfAskWithSearch,
+        }
     }
 
     /// ReAct Docstore agent — Search + Lookup loop over a document store.
     #[staticmethod]
     fn react_docstore() -> Self {
-        PyAgentType { inner: AgentType::ReactDocstore }
+        PyAgentType {
+            inner: AgentType::ReactDocstore,
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -151,7 +162,9 @@ impl PyToolSpec {
 
     /// Add a parameter with its type.
     fn add_parameter(&mut self, name: &str, param_type: &str) {
-        self.inner.parameters.insert(name.to_string(), param_type.to_string());
+        self.inner
+            .parameters
+            .insert(name.to_string(), param_type.to_string());
     }
 
     /// Mark a parameter as required.
@@ -170,7 +183,10 @@ impl PyToolSpec {
     }
 
     fn __repr__(&self) -> String {
-        format!("ToolSpec(name='{}', desc='{}')", self.inner.name, self.inner.description)
+        format!(
+            "ToolSpec(name='{}', desc='{}')",
+            self.inner.name, self.inner.description
+        )
     }
 }
 
@@ -230,7 +246,9 @@ fn extract_tool_definition(obj: &Bound<'_, PyAny>) -> PyResult<ToolDefinition> {
 /// Falls back to the built-in Rust `ToolRegistry` when no Python registry is
 /// provided so that built-in tools (calculator, file, duckduckgo_search, …)
 /// work without any extra setup.
-fn build_executor(py_registry: Option<PyObject>) -> flowgentra_ai::core::agents::graph_nodes::ToolExecutorFn {
+fn build_executor(
+    py_registry: Option<PyObject>,
+) -> flowgentra_ai::core::agents::graph_nodes::ToolExecutorFn {
     match py_registry {
         Some(registry_obj) => {
             // The Python-level ToolRegistry handles both Rust built-ins and
@@ -360,9 +378,10 @@ pub struct PyZeroShotReAct {
 #[pymethods]
 impl PyZeroShotReAct {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, llm, system_prompt=None, tools=None, retries=3, memory_steps=None, tool_registry=None))]
     fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         name: &str,
         llm: &PyLLM,
         system_prompt: Option<&str>,
@@ -371,7 +390,8 @@ impl PyZeroShotReAct {
         memory_steps: Option<usize>,
         tool_registry: Option<PyObject>,
     ) -> PyResult<Self> {
-        let mut config = build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
+        let mut config =
+            build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
         config.tool_executor = Some(build_executor(tool_registry));
         let agent = RsZeroShotReAct::new(config).map_err(to_py_err)?;
         Ok(Self { inner: agent })
@@ -382,9 +402,13 @@ impl PyZeroShotReAct {
     }
 
     #[getter]
-    fn name(&self) -> String { self.inner.name().to_string() }
+    fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
 
-    fn node_names(&self) -> Vec<String> { self.inner.graph().node_names() }
+    fn node_names(&self) -> Vec<String> {
+        self.inner.graph().node_names()
+    }
 
     fn __repr__(&self) -> String {
         format!("ZeroShotReAct(name='{}')", self.inner.name())
@@ -402,9 +426,10 @@ pub struct PyFewShotReAct {
 #[pymethods]
 impl PyFewShotReAct {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, llm, system_prompt=None, tools=None, retries=3, memory_steps=None, tool_registry=None))]
     fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         name: &str,
         llm: &PyLLM,
         system_prompt: Option<&str>,
@@ -413,7 +438,8 @@ impl PyFewShotReAct {
         memory_steps: Option<usize>,
         tool_registry: Option<PyObject>,
     ) -> PyResult<Self> {
-        let mut config = build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
+        let mut config =
+            build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
         config.tool_executor = Some(build_executor(tool_registry));
         let agent = RsFewShotReAct::new(config).map_err(to_py_err)?;
         Ok(Self { inner: agent })
@@ -424,9 +450,13 @@ impl PyFewShotReAct {
     }
 
     #[getter]
-    fn name(&self) -> String { self.inner.name().to_string() }
+    fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
 
-    fn node_names(&self) -> Vec<String> { self.inner.graph().node_names() }
+    fn node_names(&self) -> Vec<String> {
+        self.inner.graph().node_names()
+    }
 
     fn __repr__(&self) -> String {
         format!("FewShotReAct(name='{}')", self.inner.name())
@@ -444,9 +474,10 @@ pub struct PyConversational {
 #[pymethods]
 impl PyConversational {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, llm, system_prompt=None, tools=None, retries=3, memory_steps=None, tool_registry=None))]
     fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         name: &str,
         llm: &PyLLM,
         system_prompt: Option<&str>,
@@ -455,7 +486,8 @@ impl PyConversational {
         memory_steps: Option<usize>,
         tool_registry: Option<PyObject>,
     ) -> PyResult<Self> {
-        let mut config = build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
+        let mut config =
+            build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
         config.tool_executor = Some(build_executor(tool_registry));
         let agent = RsConversational::new(config).map_err(to_py_err)?;
         Ok(Self { inner: agent })
@@ -466,9 +498,13 @@ impl PyConversational {
     }
 
     #[getter]
-    fn name(&self) -> String { self.inner.name().to_string() }
+    fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
 
-    fn node_names(&self) -> Vec<String> { self.inner.graph().node_names() }
+    fn node_names(&self) -> Vec<String> {
+        self.inner.graph().node_names()
+    }
 
     fn __repr__(&self) -> String {
         format!("Conversational(name='{}')", self.inner.name())
@@ -486,9 +522,10 @@ pub struct PyToolCalling {
 #[pymethods]
 impl PyToolCalling {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, llm, system_prompt=None, tools=None, retries=3, memory_steps=None, tool_registry=None))]
     fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         name: &str,
         llm: &PyLLM,
         system_prompt: Option<&str>,
@@ -497,7 +534,8 @@ impl PyToolCalling {
         memory_steps: Option<usize>,
         tool_registry: Option<PyObject>,
     ) -> PyResult<Self> {
-        let mut config = build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
+        let mut config =
+            build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
         config.tool_executor = Some(build_executor(tool_registry));
         let agent = RsToolCalling::new(config).map_err(to_py_err)?;
         Ok(Self { inner: agent })
@@ -508,9 +546,13 @@ impl PyToolCalling {
     }
 
     #[getter]
-    fn name(&self) -> String { self.inner.name().to_string() }
+    fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
 
-    fn node_names(&self) -> Vec<String> { self.inner.graph().node_names() }
+    fn node_names(&self) -> Vec<String> {
+        self.inner.graph().node_names()
+    }
 
     fn __repr__(&self) -> String {
         format!("ToolCalling(name='{}')", self.inner.name())
@@ -528,9 +570,10 @@ pub struct PyStructuredChat {
 #[pymethods]
 impl PyStructuredChat {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, llm, system_prompt=None, tools=None, retries=3, memory_steps=None, tool_registry=None))]
     fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         name: &str,
         llm: &PyLLM,
         system_prompt: Option<&str>,
@@ -539,7 +582,8 @@ impl PyStructuredChat {
         memory_steps: Option<usize>,
         tool_registry: Option<PyObject>,
     ) -> PyResult<Self> {
-        let mut config = build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
+        let mut config =
+            build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
         config.tool_executor = Some(build_executor(tool_registry));
         let agent = RsStructuredChat::new(config).map_err(to_py_err)?;
         Ok(Self { inner: agent })
@@ -550,9 +594,13 @@ impl PyStructuredChat {
     }
 
     #[getter]
-    fn name(&self) -> String { self.inner.name().to_string() }
+    fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
 
-    fn node_names(&self) -> Vec<String> { self.inner.graph().node_names() }
+    fn node_names(&self) -> Vec<String> {
+        self.inner.graph().node_names()
+    }
 
     fn __repr__(&self) -> String {
         format!("StructuredChat(name='{}')", self.inner.name())
@@ -570,9 +618,10 @@ pub struct PySelfAskWithSearch {
 #[pymethods]
 impl PySelfAskWithSearch {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, llm, system_prompt=None, tools=None, retries=3, memory_steps=None, tool_registry=None))]
     fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         name: &str,
         llm: &PyLLM,
         system_prompt: Option<&str>,
@@ -581,7 +630,8 @@ impl PySelfAskWithSearch {
         memory_steps: Option<usize>,
         tool_registry: Option<PyObject>,
     ) -> PyResult<Self> {
-        let mut config = build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
+        let mut config =
+            build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
         config.tool_executor = Some(build_executor(tool_registry));
         let agent = RsSelfAskWithSearch::new(config).map_err(to_py_err)?;
         Ok(Self { inner: agent })
@@ -592,9 +642,13 @@ impl PySelfAskWithSearch {
     }
 
     #[getter]
-    fn name(&self) -> String { self.inner.name().to_string() }
+    fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
 
-    fn node_names(&self) -> Vec<String> { self.inner.graph().node_names() }
+    fn node_names(&self) -> Vec<String> {
+        self.inner.graph().node_names()
+    }
 
     fn __repr__(&self) -> String {
         format!("SelfAskWithSearch(name='{}')", self.inner.name())
@@ -612,9 +666,10 @@ pub struct PyReactDocstore {
 #[pymethods]
 impl PyReactDocstore {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, llm, system_prompt=None, tools=None, retries=3, memory_steps=None, tool_registry=None))]
     fn new(
-        py: Python<'_>,
+        _py: Python<'_>,
         name: &str,
         llm: &PyLLM,
         system_prompt: Option<&str>,
@@ -623,7 +678,8 @@ impl PyReactDocstore {
         memory_steps: Option<usize>,
         tool_registry: Option<PyObject>,
     ) -> PyResult<Self> {
-        let mut config = build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
+        let mut config =
+            build_agent_config!(name, llm, system_prompt, tools, retries, memory_steps);
         config.tool_executor = Some(build_executor(tool_registry));
         let agent = RsReactDocstore::new(config).map_err(to_py_err)?;
         Ok(Self { inner: agent })
@@ -634,9 +690,13 @@ impl PyReactDocstore {
     }
 
     #[getter]
-    fn name(&self) -> String { self.inner.name().to_string() }
+    fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
 
-    fn node_names(&self) -> Vec<String> { self.inner.graph().node_names() }
+    fn node_names(&self) -> Vec<String> {
+        self.inner.graph().node_names()
+    }
 
     fn __repr__(&self) -> String {
         format!("ReactDocstore(name='{}')", self.inner.name())

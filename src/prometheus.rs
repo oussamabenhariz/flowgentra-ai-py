@@ -2,10 +2,8 @@
 //!
 //! Exposes PrometheusExporter, MetricsCollector, and record_llm_tokens.
 
+use flowgentra_ai::core::observability::{record_llm_tokens, MetricsCollector, PrometheusExporter};
 use pyo3::prelude::*;
-use flowgentra_ai::core::observability::{
-    MetricsCollector, PrometheusExporter, record_llm_tokens,
-};
 
 // ─── PyPrometheusExporter ──────────────────────────────────────────────────
 
@@ -27,16 +25,18 @@ impl PyPrometheusExporter {
     #[new]
     #[pyo3(signature = (addr = "0.0.0.0:9090"))]
     fn new(addr: &str) -> Self {
-        PyPrometheusExporter { addr: addr.to_string() }
+        PyPrometheusExporter {
+            addr: addr.to_string(),
+        }
     }
 
     /// Install the Prometheus recorder and start the HTTP listener.
     ///
     /// One-time call — returns an error if called twice.
     fn install(&self) -> PyResult<()> {
-        PrometheusExporter::new(&self.addr)
-            .install()
-            .map_err(|e| crate::error::InternalError::new_err(format!("Prometheus install failed: {}", e)))
+        PrometheusExporter::new(&self.addr).install().map_err(|e| {
+            crate::error::InternalError::new_err(format!("Prometheus install failed: {}", e))
+        })
     }
 
     fn __repr__(&self) -> String {

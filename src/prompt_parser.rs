@@ -1,13 +1,11 @@
 //! Python bindings for PromptTemplate and output parsers
 
-use pyo3::prelude::*;
 use crate::error::ValidationError;
+use pyo3::prelude::*;
 use std::collections::HashMap;
 
+use flowgentra_ai::core::llm::output_parser::{JsonOutputParser, ListOutputParser, OutputParser};
 use flowgentra_ai::core::llm::prompt_template::PromptTemplate;
-use flowgentra_ai::core::llm::output_parser::{
-    JsonOutputParser, ListOutputParser, OutputParser,
-};
 
 use crate::json_to_py;
 
@@ -52,10 +50,7 @@ impl PyPromptTemplate {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "PromptTemplate(vars={:?})",
-            self.inner.input_variables()
-        )
+        format!("PromptTemplate(vars={:?})", self.inner.input_variables())
     }
 }
 
@@ -132,9 +127,7 @@ impl PyListOutputParser {
             "numbered" => ListOutputParser::numbered(),
             _ => ListOutputParser::comma_separated(),
         };
-        PyListOutputParser {
-            inner: parser,
-        }
+        PyListOutputParser { inner: parser }
     }
 
     /// Parse a list from text.

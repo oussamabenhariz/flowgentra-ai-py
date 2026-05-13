@@ -25,7 +25,9 @@ macro_rules! impl_tool {
                     .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
                 json_to_py(py, &val)
             }
-            fn __repr__(&self) -> String { $repr.to_string() }
+            fn __repr__(&self) -> String {
+                $repr.to_string()
+            }
         }
     };
 }
@@ -41,7 +43,9 @@ pub struct PyCopyFileTool {
 impl PyCopyFileTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(CopyFileTool::default()) }
+        Self {
+            inner: Arc::new(CopyFileTool::default()),
+        }
     }
 }
 impl_tool!(PyCopyFileTool, "CopyFileTool()");
@@ -57,7 +61,9 @@ pub struct PyDeleteFileTool {
 impl PyDeleteFileTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(DeleteFileTool::default()) }
+        Self {
+            inner: Arc::new(DeleteFileTool::default()),
+        }
     }
 }
 impl_tool!(PyDeleteFileTool, "DeleteFileTool()");
@@ -73,7 +79,9 @@ pub struct PyMoveFileTool {
 impl PyMoveFileTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(MoveFileTool::default()) }
+        Self {
+            inner: Arc::new(MoveFileTool::default()),
+        }
     }
 }
 impl_tool!(PyMoveFileTool, "MoveFileTool()");
@@ -89,7 +97,9 @@ pub struct PyFileSearchTool {
 impl PyFileSearchTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(FileSearchTool::default()) }
+        Self {
+            inner: Arc::new(FileSearchTool::default()),
+        }
     }
 }
 impl_tool!(PyFileSearchTool, "FileSearchTool()");

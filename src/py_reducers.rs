@@ -95,7 +95,14 @@ impl PyBinaryOperatorField {
     }
 
     fn __repr__(&self, py: Python<'_>) -> String {
-        format!("BinaryOperatorField(func={})", self.func.bind(py).repr().map(|s| s.to_string()).unwrap_or_else(|_| "<fn>".into()))
+        format!(
+            "BinaryOperatorField(func={})",
+            self.func
+                .bind(py)
+                .repr()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|_| "<fn>".into())
+        )
     }
 
     /// Invoke the merge function from Python (useful for testing).
@@ -174,8 +181,10 @@ fn py_reducer_to_channel_type(
                 let py_a = crate::json_to_py(py, &a).unwrap_or_else(|_| py.None());
                 let py_b = crate::json_to_py(py, &b).unwrap_or_else(|_| py.None());
                 match func.call1(py, (py_a, py_b)) {
-                    Ok(result) => crate::py_to_json(result.bind(py)).unwrap_or(serde_json::Value::Null),
-                    Err(_) => b,  // on error, fall back to new value
+                    Ok(result) => {
+                        crate::py_to_json(result.bind(py)).unwrap_or(serde_json::Value::Null)
+                    }
+                    Err(_) => b, // on error, fall back to new value
                 }
             })
         })));
@@ -189,7 +198,9 @@ fn py_reducer_to_channel_type(
                 let py_a = crate::json_to_py(py, &a).unwrap_or_else(|_| py.None());
                 let py_b = crate::json_to_py(py, &b).unwrap_or_else(|_| py.None());
                 match func.call1(py, (py_a, py_b)) {
-                    Ok(result) => crate::py_to_json(result.bind(py)).unwrap_or(serde_json::Value::Null),
+                    Ok(result) => {
+                        crate::py_to_json(result.bind(py)).unwrap_or(serde_json::Value::Null)
+                    }
                     Err(_) => b,
                 }
             })
@@ -208,7 +219,9 @@ fn py_reducer_to_channel_type(
         };
     }
 
-    let type_name = obj.get_type().name()
+    let type_name = obj
+        .get_type()
+        .name()
         .map(|n| n.to_string())
         .unwrap_or_else(|_| "unknown".to_string());
     Err(pyo3::exceptions::PyTypeError::new_err(format!(

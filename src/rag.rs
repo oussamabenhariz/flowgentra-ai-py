@@ -5,14 +5,12 @@ use pyo3::types::PyDict;
 use serde_json::Value;
 use std::collections::HashMap;
 
-use flowgentra_ai::core::rag::{
-    Document, SearchResult, PdfDocument,
-    chunk_text, chunk_text_by_tokens, estimate_tokens, extract_text, extract_and_chunk,
-    bm25_score, hybrid_merge,
-    dedup_by_id, dedup_by_similarity,
-    QueryExpander,
-};
 use flowgentra_ai::core::rag::text_splitter::TextChunk;
+use flowgentra_ai::core::rag::{
+    bm25_score, chunk_text, chunk_text_by_tokens, dedup_by_id, dedup_by_similarity,
+    estimate_tokens, extract_and_chunk, extract_text, hybrid_merge, Document, PdfDocument,
+    QueryExpander, SearchResult,
+};
 
 use crate::{json_to_py, py_to_json};
 
@@ -159,10 +157,7 @@ impl PyTextChunk {
 
     fn __repr__(&self) -> String {
         let preview_len = self.inner.text.len().min(40);
-        format!(
-            "TextChunk(text='{}...')",
-            &self.inner.text[..preview_len]
-        )
+        format!("TextChunk(text='{}...')", &self.inner.text[..preview_len])
     }
 
     fn __len__(&self) -> usize {
@@ -182,8 +177,7 @@ pub fn py_chunk_text(text: &str, chunk_size: usize, overlap: usize) -> Vec<Strin
 /// Extract text content from a PDF file (async, blocks until done).
 #[pyfunction]
 pub fn py_extract_text(path: &str) -> PyResult<String> {
-    let result = 
-        crate::run_async(extract_text(path))
+    let result = crate::run_async(extract_text(path))
         .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))?;
     Ok(result.text)
 }
@@ -197,14 +191,22 @@ pub fn py_estimate_tokens(text: &str) -> usize {
 /// Split text into chunks by token count.
 #[pyfunction]
 #[pyo3(signature = (text, max_tokens, overlap_tokens=0))]
-pub fn py_chunk_text_by_tokens(text: &str, max_tokens: usize, overlap_tokens: usize) -> Vec<String> {
+pub fn py_chunk_text_by_tokens(
+    text: &str,
+    max_tokens: usize,
+    overlap_tokens: usize,
+) -> Vec<String> {
     chunk_text_by_tokens(text, max_tokens, overlap_tokens)
 }
 
 /// Extract text from a PDF and split into (id, text) chunks.
 #[pyfunction]
 #[pyo3(signature = (path, chunk_size=1000, overlap=200))]
-pub fn py_extract_and_chunk(path: &str, chunk_size: usize, overlap: usize) -> PyResult<Vec<(String, String)>> {
+pub fn py_extract_and_chunk(
+    path: &str,
+    chunk_size: usize,
+    overlap: usize,
+) -> PyResult<Vec<(String, String)>> {
     crate::run_async(extract_and_chunk(path, chunk_size, overlap))
         .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))
 }
@@ -247,8 +249,7 @@ impl PyPdfDocument {
 /// Extract a PDF into a PdfDocument object.
 #[pyfunction]
 pub fn py_extract_pdf(path: &str) -> PyResult<PyPdfDocument> {
-    let doc = 
-        crate::run_async(extract_text(path))
+    let doc = crate::run_async(extract_text(path))
         .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))?;
     Ok(PyPdfDocument { inner: doc })
 }
@@ -265,10 +266,17 @@ pub fn py_bm25_score(query: &str, documents: Vec<String>) -> Vec<f32> {
 /// Merge semantic results with keyword scores using hybrid weighting.
 #[pyfunction]
 #[pyo3(signature = (results, query, keyword_weight=0.3))]
-pub fn py_hybrid_merge(results: Vec<PySearchResult>, query: &str, keyword_weight: f32) -> Vec<PySearchResult> {
+pub fn py_hybrid_merge(
+    results: Vec<PySearchResult>,
+    query: &str,
+    keyword_weight: f32,
+) -> Vec<PySearchResult> {
     let rs: Vec<SearchResult> = results.into_iter().map(|r| r.inner).collect();
     let merged = hybrid_merge(rs, query, keyword_weight);
-    merged.into_iter().map(|r| PySearchResult { inner: r }).collect()
+    merged
+        .into_iter()
+        .map(|r| PySearchResult { inner: r })
+        .collect()
 }
 
 // ─── Dedup functions ───────────────────────────────────────────────────────
@@ -278,7 +286,10 @@ pub fn py_hybrid_merge(results: Vec<PySearchResult>, query: &str, keyword_weight
 pub fn py_dedup_by_id(results: Vec<PySearchResult>) -> Vec<PySearchResult> {
     let rs: Vec<SearchResult> = results.into_iter().map(|r| r.inner).collect();
     let deduped = dedup_by_id(rs);
-    deduped.into_iter().map(|r| PySearchResult { inner: r }).collect()
+    deduped
+        .into_iter()
+        .map(|r| PySearchResult { inner: r })
+        .collect()
 }
 
 /// Deduplicate search results by text similarity threshold.
@@ -287,7 +298,10 @@ pub fn py_dedup_by_id(results: Vec<PySearchResult>) -> Vec<PySearchResult> {
 pub fn py_dedup_by_similarity(results: Vec<PySearchResult>, threshold: f32) -> Vec<PySearchResult> {
     let rs: Vec<SearchResult> = results.into_iter().map(|r| r.inner).collect();
     let deduped = dedup_by_similarity(rs, threshold);
-    deduped.into_iter().map(|r| PySearchResult { inner: r }).collect()
+    deduped
+        .into_iter()
+        .map(|r| PySearchResult { inner: r })
+        .collect()
 }
 
 // ─── Query expansion ───────────────────────────────────────────────────────

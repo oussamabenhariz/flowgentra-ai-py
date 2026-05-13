@@ -8,7 +8,6 @@ use flowgentra_ai::core::observability::otel::{
     export_to_otlp, spans_to_otlp_json, trace_to_otel_spans, OtelAttribute, OtelSpan, OtelStatus,
 };
 
-
 // ─── PyOtelStatus ─────────────────────────────────────────────────────────
 
 /// OTLP span status (code: 0=Unset, 1=Ok, 2=Error).
@@ -160,9 +159,7 @@ impl PyOtelSpan {
 ///     spans = trace_to_otel_spans(trace)
 ///     print(f"Generated {len(spans)} spans")
 #[pyfunction]
-pub fn py_trace_to_otel_spans(
-    trace: &crate::observability::PyExecutionTrace,
-) -> Vec<PyOtelSpan> {
+pub fn py_trace_to_otel_spans(trace: &crate::observability::PyExecutionTrace) -> Vec<PyOtelSpan> {
     trace_to_otel_spans(&trace.inner)
         .into_iter()
         .map(|s| PyOtelSpan { inner: s })

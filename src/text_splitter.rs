@@ -1,15 +1,15 @@
 //! Python bindings for text splitters
 
+use flowgentra_ai::core::rag::{
+    CodeTextSplitter, Document, HTMLTextSplitter, Language, MarkdownTextSplitter,
+    RecursiveCharacterTextSplitter, TextChunk, TextSplitter, TokenTextSplitter,
+};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
-use flowgentra_ai::core::rag::{
-    RecursiveCharacterTextSplitter, MarkdownTextSplitter, HTMLTextSplitter,
-    TokenTextSplitter, CodeTextSplitter, Language, TextSplitter, TextChunk, Document,
-};
 
-use crate::rag::{PyTextChunk, PyDocument};
 use crate::py_to_json;
+use crate::rag::{PyDocument, PyTextChunk};
 
 // ─── Helper to convert Vec<TextChunk> → Vec<PyTextChunk> ───────────────────
 
@@ -22,18 +22,21 @@ fn to_py_chunks(chunks: Vec<TextChunk>) -> Vec<PyTextChunk> {
 
 // ─── Helper to extract Document content and ID from mixed input ────────────
 
-fn extract_document_info(obj: &Bound<'_, PyAny>) -> PyResult<(String, String, Option<HashMap<String, serde_json::Value>>)> {
+#[allow(clippy::type_complexity)]
+fn extract_document_info(
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<(String, String, Option<HashMap<String, serde_json::Value>>)> {
     // Try string first (simpler)
     if let Ok(text) = obj.extract::<String>() {
-        return Ok((
-            "string_chunk".to_string(),
-            text,
-            None,
-        ));
+        return Ok(("string_chunk".to_string(), text, None));
     }
 
     // Try PyDocument by checking type name and extracting fields
-    let type_name_owned = obj.get_type().name().map(|s| s.to_string()).unwrap_or_else(|_| "unknown".to_string());
+    let type_name_owned = obj
+        .get_type()
+        .name()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
     let type_name = type_name_owned.as_str();
     if type_name == "Document" {
         // Extract as PyDocument by accessing attributes
@@ -140,49 +143,58 @@ impl PyRecursiveCharacterTextSplitter {
             py.allow_threads(|| {
                 extracted_docs
                     .into_iter()
-                    .flat_map(|(doc_id, text, original_metadata): (String, String, Option<HashMap<String, serde_json::Value>>)| {
-                        // Split the text
-                        let text_chunks = splitter.split_text(&text);
+                    .flat_map(
+                        |(doc_id, text, original_metadata): (
+                            String,
+                            String,
+                            Option<HashMap<String, serde_json::Value>>,
+                        )| {
+                            // Split the text
+                            let text_chunks = splitter.split_text(&text);
 
-                        // Convert chunks to documents with enriched metadata
-                        text_chunks
-                            .into_iter()
-                            .map(|chunk| {
-                                let mut enriched_metadata =
-                                    original_metadata.clone().unwrap_or_default();
+                            // Convert chunks to documents with enriched metadata
+                            text_chunks
+                                .into_iter()
+                                .map(|chunk| {
+                                    let mut enriched_metadata =
+                                        original_metadata.clone().unwrap_or_default();
 
-                                // Add chunk tracking metadata
-                                enriched_metadata.insert(
-                                    "source_doc_id".to_string(),
-                                    serde_json::Value::String(doc_id.clone()),
-                                );
-                                enriched_metadata.insert(
-                                    "chunk_index".to_string(),
-                                    serde_json::Value::Number(
-                                        chunk.metadata.chunk_index.into(),
-                                    ),
-                                );
-                                enriched_metadata.insert(
-                                    "start_char".to_string(),
-                                    serde_json::Value::Number(chunk.metadata.start_char.into()),
-                                );
-                                enriched_metadata.insert(
-                                    "end_char".to_string(),
-                                    serde_json::Value::Number(chunk.metadata.end_char.into()),
-                                );
+                                    // Add chunk tracking metadata
+                                    enriched_metadata.insert(
+                                        "source_doc_id".to_string(),
+                                        serde_json::Value::String(doc_id.clone()),
+                                    );
+                                    enriched_metadata.insert(
+                                        "chunk_index".to_string(),
+                                        serde_json::Value::Number(
+                                            chunk.metadata.chunk_index.into(),
+                                        ),
+                                    );
+                                    enriched_metadata.insert(
+                                        "start_char".to_string(),
+                                        serde_json::Value::Number(chunk.metadata.start_char.into()),
+                                    );
+                                    enriched_metadata.insert(
+                                        "end_char".to_string(),
+                                        serde_json::Value::Number(chunk.metadata.end_char.into()),
+                                    );
 
-                                // Create document for this chunk
-                                let chunk_doc = Document {
-                                    id: format!("{}_chunk_{}", doc_id, chunk.metadata.chunk_index),
-                                    text: chunk.text,
-                                    metadata: enriched_metadata,
-                                    embedding: None,
-                                };
+                                    // Create document for this chunk
+                                    let chunk_doc = Document {
+                                        id: format!(
+                                            "{}_chunk_{}",
+                                            doc_id, chunk.metadata.chunk_index
+                                        ),
+                                        text: chunk.text,
+                                        metadata: enriched_metadata,
+                                        embedding: None,
+                                    };
 
-                                PyDocument { inner: chunk_doc }
-                            })
-                            .collect::<Vec<_>>()
-                    })
+                                    PyDocument { inner: chunk_doc }
+                                })
+                                .collect::<Vec<_>>()
+                        },
+                    )
                     .collect::<Vec<_>>()
             })
         });

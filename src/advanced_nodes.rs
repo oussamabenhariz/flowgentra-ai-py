@@ -23,25 +23,33 @@ impl PyJoinType {
     /// Wait for all branches to complete.
     #[staticmethod]
     fn wait_all() -> Self {
-        PyJoinType { inner: JoinType::WaitAll }
+        PyJoinType {
+            inner: JoinType::WaitAll,
+        }
     }
 
     /// Continue as soon as any branch completes.
     #[staticmethod]
     fn wait_any() -> Self {
-        PyJoinType { inner: JoinType::WaitAny }
+        PyJoinType {
+            inner: JoinType::WaitAny,
+        }
     }
 
     /// Wait for a specific number of branches.
     #[staticmethod]
     fn wait_count(n: usize) -> Self {
-        PyJoinType { inner: JoinType::WaitCount(n) }
+        PyJoinType {
+            inner: JoinType::WaitCount(n),
+        }
     }
 
     /// Timeout-based join.
     #[staticmethod]
     fn wait_timeout() -> Self {
-        PyJoinType { inner: JoinType::WaitTimeout }
+        PyJoinType {
+            inner: JoinType::WaitTimeout,
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -67,27 +75,37 @@ pub struct PyMergeStrategy {
 impl PyMergeStrategy {
     #[staticmethod]
     fn combine() -> Self {
-        PyMergeStrategy { inner: MergeStrategy::Combine }
+        PyMergeStrategy {
+            inner: MergeStrategy::Combine,
+        }
     }
 
     #[staticmethod]
     fn first() -> Self {
-        PyMergeStrategy { inner: MergeStrategy::First }
+        PyMergeStrategy {
+            inner: MergeStrategy::First,
+        }
     }
 
     #[staticmethod]
     fn last() -> Self {
-        PyMergeStrategy { inner: MergeStrategy::Last }
+        PyMergeStrategy {
+            inner: MergeStrategy::Last,
+        }
     }
 
     #[staticmethod]
     fn by_branch() -> Self {
-        PyMergeStrategy { inner: MergeStrategy::ByBranch }
+        PyMergeStrategy {
+            inner: MergeStrategy::ByBranch,
+        }
     }
 
     #[staticmethod]
     fn custom() -> Self {
-        PyMergeStrategy { inner: MergeStrategy::Custom }
+        PyMergeStrategy {
+            inner: MergeStrategy::Custom,
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -131,7 +149,10 @@ impl PyBranchConfig {
     }
 
     fn __repr__(&self) -> String {
-        format!("BranchConfig(name='{}', handler='{}')", self.inner.name, self.inner.handler)
+        format!(
+            "BranchConfig(name='{}', handler='{}')",
+            self.inner.name, self.inner.handler
+        )
     }
 }
 
@@ -383,4 +404,3 @@ impl PyJoinNodeConfig {
         format!("JoinNodeConfig(name='{}')", self.inner.name)
     }
 }
-

@@ -26,8 +26,8 @@ use flowgentra_ai::core::rag::{
     web_retrievers::{ArxivRetriever, TavilySearchRetriever, WikipediaRetriever},
 };
 
-use crate::run_async;
 use crate::rag::PySearchResult;
+use crate::run_async;
 
 fn to_py_err(e: flowgentra_ai::core::rag::vector_db::VectorStoreError) -> PyErr {
     crate::error::to_py_err_generic(e)
@@ -79,7 +79,10 @@ impl PyWikipediaRetriever {
     fn retrieve(&self, query: &str) -> PyResult<Vec<PySearchResult>> {
         let q = query.to_string();
         let results = run_async(async { self.inner.retrieve(&q).await }).map_err(to_py_err)?;
-        Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        Ok(results
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     fn __repr__(&self) -> String {
@@ -136,7 +139,10 @@ impl PyArxivRetriever {
     fn retrieve(&self, query: &str) -> PyResult<Vec<PySearchResult>> {
         let q = query.to_string();
         let results = run_async(async { self.inner.retrieve(&q).await }).map_err(to_py_err)?;
-        Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        Ok(results
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     fn __repr__(&self) -> String {
@@ -202,7 +208,10 @@ impl PyTavilySearchRetriever {
     fn retrieve(&self, query: &str) -> PyResult<Vec<PySearchResult>> {
         let q = query.to_string();
         let results = run_async(async { self.inner.retrieve(&q).await }).map_err(to_py_err)?;
-        Ok(results.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        Ok(results
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     fn __repr__(&self) -> String {

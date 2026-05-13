@@ -5,21 +5,22 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::error::{ConfigurationError, ValidationError};
 use flowgentra_ai::core::agent::Agent;
-use flowgentra_ai::core::error::FlowgentraError;
-use crate::error::{AgentExecutionError, ConfigurationError, ValidationError};
 use flowgentra_ai::core::agents::{AgentConfig, AgentType, GraphBasedAgent};
-use flowgentra_ai::{ArcHandler, from_config_path_with_extra_handlers};
+use flowgentra_ai::core::error::FlowgentraError;
 use flowgentra_ai::core::state::DynState;
+use flowgentra_ai::{from_config_path_with_extra_handlers, ArcHandler};
 
-use crate::error::to_py_err;
 use crate::config::PyAgentConfig;
+use crate::error::to_py_err;
+use crate::graph::dynstate_to_pydict;
 use crate::llm::PyLLMConfig;
 use crate::py_to_json;
-use crate::graph::dynstate_to_pydict;
 
 // ─── Internal enum for different agent backends ───────────────────────────────
 
+#[allow(clippy::large_enum_variant)]
 enum PyAgentInner {
     ConfigBased(Agent),
     GraphBased(GraphBasedAgent),
@@ -40,19 +41,14 @@ pub(crate) fn wrap_python_callable(py_func: PyObject) -> ArcHandler<DynState> {
                 let state_dict = dynstate_to_pydict(py, &state)
                     .map_err(|e| FlowgentraError::ExecutionError(e.to_string()))?;
 
-                let py_result = func
-                    .as_ref()
-                    .call1(py, (state_dict,))
-                    .map_err(|e| FlowgentraError::ExecutionError(
-                        format!("Python handler error: {}", e)
-                    ))?;
+                let py_result = func.as_ref().call1(py, (state_dict,)).map_err(|e| {
+                    FlowgentraError::ExecutionError(format!("Python handler error: {}", e))
+                })?;
 
                 let result_bound = py_result.bind(py);
-                let result_dict = result_bound
-                    .downcast::<PyDict>()
-                    .map_err(|_| FlowgentraError::ExecutionError(
-                        "Python handler must return a dict".to_string()
-                    ))?;
+                let result_dict = result_bound.downcast::<PyDict>().map_err(|_| {
+                    FlowgentraError::ExecutionError("Python handler must return a dict".to_string())
+                })?;
 
                 // Build new state: start from current state, apply returned dict as update
                 let new_state = state.clone();
@@ -106,7 +102,11 @@ pub(crate) fn scan_module_for_handlers(
         let name: String = pair.get_item(0)?.extract()?;
         let func = pair.get_item(1)?;
         // Check for _is_handler attribute (set by @register_handler decorator)
-        if func.getattr("_is_handler").map(|v| v.is_truthy().unwrap_or(false)).unwrap_or(false) {
+        if func
+            .getattr("_is_handler")
+            .map(|v| v.is_truthy().unwrap_or(false))
+            .unwrap_or(false)
+        {
             handlers.insert(name, func.to_object(py));
         }
     }
@@ -161,11 +161,7 @@ impl PyAgent {
     ///     result = agent.run_with_input("Hello!")
     #[staticmethod]
     #[pyo3(signature = (agent_type, llm, memory_steps=10))]
-    fn create(
-        agent_type: &str,
-        llm: PyLLMConfig,
-        memory_steps: usize,
-    ) -> PyResult<Self> {
+    fn create(agent_type: &str, llm: PyLLMConfig, memory_steps: usize) -> PyResult<Self> {
         let agent_type_inner = match agent_type.to_lowercase().as_str() {
             "zero_shot_react" => AgentType::ZeroShotReAct,
             "few_shot_react" => AgentType::FewShotReAct,
@@ -185,7 +181,9 @@ impl PyAgent {
         let prebuilt = config.into_prebuilt(agent_type_inner);
         let graph_based = GraphBasedAgent::new(prebuilt, None).map_err(to_py_err)?;
 
-        Ok(PyAgent { inner: PyAgentInner::GraphBased(graph_based) })
+        Ok(PyAgent {
+            inner: PyAgentInner::GraphBased(graph_based),
+        })
     }
 
     /// Option B: Create agent from YAML config file path.
@@ -233,10 +231,7 @@ impl PyAgent {
         })?;
 
         let yaml_val: serde_yml::Value = serde_yml::from_str(&yaml_content).map_err(|e| {
-            ConfigurationError::new_err(format!(
-                "Invalid YAML in '{}': {}",
-                config_path, e
-            ))
+            ConfigurationError::new_err(format!("Invalid YAML in '{}': {}", config_path, e))
         })?;
 
         // ── Step 2: Collect Python handlers ───────────────────────────────────
@@ -258,10 +253,7 @@ impl PyAgent {
             .and_then(|n| n.as_sequence())
         {
             for node in nodes {
-                let handler_spec = node
-                    .get("handler")
-                    .and_then(|h| h.as_str())
-                    .unwrap_or("");
+                let handler_spec = node.get("handler").and_then(|h| h.as_str()).unwrap_or("");
                 let node_name = node.get("name").and_then(|n| n.as_str()).unwrap_or("");
 
                 if let Some(py_spec) = handler_spec.strip_prefix("python.") {
@@ -287,7 +279,9 @@ impl PyAgent {
         let agent =
             from_config_path_with_extra_handlers(config_path, extra_handlers).map_err(to_py_err)?;
 
-        Ok(PyAgent { inner: PyAgentInner::ConfigBased(agent) })
+        Ok(PyAgent {
+            inner: PyAgentInner::ConfigBased(agent),
+        })
     }
 
     /// Get the agent's current state as a plain dict.
@@ -297,9 +291,7 @@ impl PyAgent {
             PyAgentInner::ConfigBased(agent) => {
                 dynstate_to_pydict(py, &agent.state).map(|d| d.into())
             }
-            PyAgentInner::GraphBased(_) => {
-                Ok(pyo3::types::PyDict::new_bound(py).into())
-            }
+            PyAgentInner::GraphBased(_) => Ok(pyo3::types::PyDict::new_bound(py).into()),
         }
     }
 
@@ -307,7 +299,9 @@ impl PyAgent {
     fn set_state(&mut self, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
         let val = py_to_json(value)?;
         match &mut self.inner {
-            PyAgentInner::ConfigBased(agent) => { agent.state.set(key, val); }
+            PyAgentInner::ConfigBased(agent) => {
+                agent.state.set(key, val);
+            }
             PyAgentInner::GraphBased(_) => {} // state not applicable
         }
         Ok(())
@@ -318,28 +312,28 @@ impl PyAgent {
         match &mut self.inner {
             PyAgentInner::ConfigBased(agent) => {
                 let fut = agent.run();
-                let result = py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)?;
+                let result = py
+                    .allow_threads(|| crate::run_async(fut))
+                    .map_err(to_py_err)?;
                 dynstate_to_pydict(py, &result).map(|d| d.into())
             }
-            PyAgentInner::GraphBased(_) => {
-                Err(ValidationError::new_err(
-                    "Use run_with_input(input) for agents created via Agent.create()"
-                ))
-            }
+            PyAgentInner::GraphBased(_) => Err(ValidationError::new_err(
+                "Use run_with_input(input) for agents created via Agent.create()",
+            )),
         }
     }
 
     /// Run the agent with a string input (for agents created via Agent.create()).
     fn run_with_input(&self, py: Python<'_>, input: &str) -> PyResult<PyObject> {
         match &self.inner {
-            PyAgentInner::ConfigBased(_) => {
-                Err(ValidationError::new_err(
-                    "Use run() for config-based agents created via Agent.from_config_path()"
-                ))
-            }
+            PyAgentInner::ConfigBased(_) => Err(ValidationError::new_err(
+                "Use run() for config-based agents created via Agent.from_config_path()",
+            )),
             PyAgentInner::GraphBased(agent) => {
                 let fut = agent.execute_input(input);
-                let result = py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)?;
+                let result = py
+                    .allow_threads(|| crate::run_async(fut))
+                    .map_err(to_py_err)?;
                 let dict = pyo3::types::PyDict::new_bound(py);
                 dict.set_item("result", result)?;
                 Ok(dict.into())
@@ -352,14 +346,14 @@ impl PyAgent {
         match &mut self.inner {
             PyAgentInner::ConfigBased(agent) => {
                 let fut = agent.run_with_thread(thread_id);
-                let result = py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)?;
+                let result = py
+                    .allow_threads(|| crate::run_async(fut))
+                    .map_err(to_py_err)?;
                 dynstate_to_pydict(py, &result).map(|d| d.into())
             }
-            PyAgentInner::GraphBased(_) => {
-                Err(ValidationError::new_err(
-                    "run_with_thread is not supported for agents created via Agent.create()"
-                ))
-            }
+            PyAgentInner::GraphBased(_) => Err(ValidationError::new_err(
+                "run_with_thread is not supported for agents created via Agent.create()",
+            )),
         }
     }
 
@@ -367,9 +361,11 @@ impl PyAgent {
     #[getter]
     fn config(&self) -> PyResult<PyAgentConfig> {
         match &self.inner {
-            PyAgentInner::ConfigBased(agent) => Ok(PyAgentConfig { inner: agent.config().clone() }),
+            PyAgentInner::ConfigBased(agent) => Ok(PyAgentConfig {
+                inner: agent.config().clone(),
+            }),
             PyAgentInner::GraphBased(_) => Err(pyo3::exceptions::PyAttributeError::new_err(
-                "config not available for agents created via Agent.create()"
+                "config not available for agents created via Agent.create()",
             )),
         }
     }

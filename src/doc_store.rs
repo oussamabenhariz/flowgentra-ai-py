@@ -53,10 +53,14 @@ impl PyMongoDocumentStore {
             use flowgentra_ai::core::db::document::mongodb::MongoDocumentStore;
             let store = run_async(MongoDocumentStore::connect(uri, database))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
-            Ok(Self { inner: Arc::new(store) })
+            Ok(Self {
+                inner: Arc::new(store),
+            })
         }
         #[cfg(not(feature = "mongodb-store"))]
-        Err(crate::error::ConfigurationError::new_err("mongodb-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "mongodb-store feature not enabled",
+        ))
     }
 
     /// Insert a document. Returns the inserted document ID.
@@ -69,11 +73,18 @@ impl PyMongoDocumentStore {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "mongodb-store"))]
-        Err(crate::error::ConfigurationError::new_err("mongodb-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "mongodb-store feature not enabled",
+        ))
     }
 
     /// Find documents matching filter. Returns a list of dicts.
-    fn find(&self, py: Python<'_>, collection: &str, filter: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    fn find(
+        &self,
+        py: Python<'_>,
+        collection: &str,
+        filter: &Bound<'_, PyAny>,
+    ) -> PyResult<PyObject> {
         #[cfg(feature = "mongodb-store")]
         {
             use flowgentra_ai::core::db::document::DocumentStore;
@@ -81,11 +92,15 @@ impl PyMongoDocumentStore {
             let docs = run_async(self.inner.find(collection, filter_val))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
             let list = PyList::empty_bound(py);
-            for doc in docs { list.append(json_to_py(py, &doc)?)?; }
+            for doc in docs {
+                list.append(json_to_py(py, &doc)?)?;
+            }
             Ok(list.into())
         }
         #[cfg(not(feature = "mongodb-store"))]
-        Err(crate::error::ConfigurationError::new_err("mongodb-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "mongodb-store feature not enabled",
+        ))
     }
 
     /// Delete a document by ID.
@@ -97,10 +112,14 @@ impl PyMongoDocumentStore {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "mongodb-store"))]
-        Err(crate::error::ConfigurationError::new_err("mongodb-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "mongodb-store feature not enabled",
+        ))
     }
 
-    fn __repr__(&self) -> String { "MongoDocumentStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "MongoDocumentStore(...)".to_string()
+    }
 }
 
 // ─── RedisDocumentStore ───────────────────────────────────────────────────────
@@ -132,10 +151,14 @@ impl PyRedisDocumentStore {
             use flowgentra_ai::core::db::document::redis::RedisDocumentStore;
             let store = run_async(RedisDocumentStore::connect(url))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
-            Ok(Self { inner: Arc::new(store) })
+            Ok(Self {
+                inner: Arc::new(store),
+            })
         }
         #[cfg(not(feature = "redis-store"))]
-        Err(crate::error::ConfigurationError::new_err("redis-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "redis-store feature not enabled",
+        ))
     }
 
     fn insert(&self, collection: &str, doc: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -146,21 +169,32 @@ impl PyRedisDocumentStore {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "redis-store"))]
-        Err(crate::error::ConfigurationError::new_err("redis-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "redis-store feature not enabled",
+        ))
     }
 
-    fn find(&self, py: Python<'_>, collection: &str, filter: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    fn find(
+        &self,
+        py: Python<'_>,
+        collection: &str,
+        filter: &Bound<'_, PyAny>,
+    ) -> PyResult<PyObject> {
         #[cfg(feature = "redis-store")]
         {
             use flowgentra_ai::core::db::document::DocumentStore;
             let docs = run_async(self.inner.find(collection, pyobj_to_json(filter)?))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
             let list = PyList::empty_bound(py);
-            for doc in docs { list.append(json_to_py(py, &doc)?)?; }
+            for doc in docs {
+                list.append(json_to_py(py, &doc)?)?;
+            }
             Ok(list.into())
         }
         #[cfg(not(feature = "redis-store"))]
-        Err(crate::error::ConfigurationError::new_err("redis-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "redis-store feature not enabled",
+        ))
     }
 
     fn delete(&self, collection: &str, id: &str) -> PyResult<()> {
@@ -171,10 +205,14 @@ impl PyRedisDocumentStore {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "redis-store"))]
-        Err(crate::error::ConfigurationError::new_err("redis-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "redis-store feature not enabled",
+        ))
     }
 
-    fn __repr__(&self) -> String { "RedisDocumentStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "RedisDocumentStore(...)".to_string()
+    }
 }
 
 // ─── Neo4jDocumentStore ───────────────────────────────────────────────────────
@@ -217,10 +255,14 @@ impl PyNeo4jDocumentStore {
             use flowgentra_ai::core::db::document::neo4j::Neo4jDocumentStore;
             let store = run_async(Neo4jDocumentStore::connect(uri, user, password))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
-            Ok(Self { inner: Arc::new(store) })
+            Ok(Self {
+                inner: Arc::new(store),
+            })
         }
         #[cfg(not(feature = "neo4j-store"))]
-        Err(crate::error::ConfigurationError::new_err("neo4j-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "neo4j-store feature not enabled",
+        ))
     }
 
     fn insert(&self, collection: &str, doc: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -231,21 +273,32 @@ impl PyNeo4jDocumentStore {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "neo4j-store"))]
-        Err(crate::error::ConfigurationError::new_err("neo4j-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "neo4j-store feature not enabled",
+        ))
     }
 
-    fn find(&self, py: Python<'_>, collection: &str, filter: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    fn find(
+        &self,
+        py: Python<'_>,
+        collection: &str,
+        filter: &Bound<'_, PyAny>,
+    ) -> PyResult<PyObject> {
         #[cfg(feature = "neo4j-store")]
         {
             use flowgentra_ai::core::db::document::DocumentStore;
             let docs = run_async(self.inner.find(collection, pyobj_to_json(filter)?))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
             let list = PyList::empty_bound(py);
-            for doc in docs { list.append(json_to_py(py, &doc)?)?; }
+            for doc in docs {
+                list.append(json_to_py(py, &doc)?)?;
+            }
             Ok(list.into())
         }
         #[cfg(not(feature = "neo4j-store"))]
-        Err(crate::error::ConfigurationError::new_err("neo4j-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "neo4j-store feature not enabled",
+        ))
     }
 
     fn delete(&self, collection: &str, id: &str) -> PyResult<()> {
@@ -256,10 +309,14 @@ impl PyNeo4jDocumentStore {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "neo4j-store"))]
-        Err(crate::error::ConfigurationError::new_err("neo4j-store feature not enabled"))
+        Err(crate::error::ConfigurationError::new_err(
+            "neo4j-store feature not enabled",
+        ))
     }
 
-    fn __repr__(&self) -> String { "Neo4jDocumentStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "Neo4jDocumentStore(...)".to_string()
+    }
 }
 
 // ─── CassandraDocumentStore ───────────────────────────────────────────────────
@@ -292,13 +349,17 @@ impl PyCassandraDocumentStore {
     ///     token:    Stargate/Astra authentication token.
     #[new]
     fn new(endpoint: &str, keyspace: &str, token: &str) -> PyResult<Self> {
-        use flowgentra_ai::core::db::document::cassandra::{CassandraDocumentStore, CassandraConfig};
+        use flowgentra_ai::core::db::document::cassandra::{
+            CassandraConfig, CassandraDocumentStore,
+        };
         let store = CassandraDocumentStore::new(CassandraConfig {
             endpoint: endpoint.to_string(),
             keyspace: keyspace.to_string(),
             token: token.to_string(),
         });
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
     fn insert(&self, collection: &str, doc: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -307,12 +368,19 @@ impl PyCassandraDocumentStore {
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
     }
 
-    fn find(&self, py: Python<'_>, collection: &str, filter: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    fn find(
+        &self,
+        py: Python<'_>,
+        collection: &str,
+        filter: &Bound<'_, PyAny>,
+    ) -> PyResult<PyObject> {
         use flowgentra_ai::core::db::document::DocumentStore;
         let docs = run_async(self.inner.find(collection, pyobj_to_json(filter)?))
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
         let list = PyList::empty_bound(py);
-        for doc in docs { list.append(json_to_py(py, &doc)?)?; }
+        for doc in docs {
+            list.append(json_to_py(py, &doc)?)?;
+        }
         Ok(list.into())
     }
 
@@ -322,7 +390,9 @@ impl PyCassandraDocumentStore {
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
     }
 
-    fn __repr__(&self) -> String { "CassandraDocumentStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "CassandraDocumentStore(...)".to_string()
+    }
 }
 
 // ─── ElasticsearchDocumentStore ───────────────────────────────────────────────
@@ -354,13 +424,15 @@ impl PyElasticsearchDocumentStore {
     #[pyo3(signature = (endpoint, api_key = None))]
     fn new(endpoint: &str, api_key: Option<String>) -> PyResult<Self> {
         use flowgentra_ai::core::db::document::elasticsearch::{
-            ElasticsearchDocumentStore, ElasticsearchDocConfig,
+            ElasticsearchDocConfig, ElasticsearchDocumentStore,
         };
         let store = ElasticsearchDocumentStore::new(ElasticsearchDocConfig {
             endpoint: endpoint.to_string(),
             api_key,
         });
-        Ok(Self { inner: Arc::new(store) })
+        Ok(Self {
+            inner: Arc::new(store),
+        })
     }
 
     fn insert(&self, collection: &str, doc: &Bound<'_, PyAny>) -> PyResult<String> {
@@ -369,12 +441,19 @@ impl PyElasticsearchDocumentStore {
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
     }
 
-    fn find(&self, py: Python<'_>, collection: &str, filter: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    fn find(
+        &self,
+        py: Python<'_>,
+        collection: &str,
+        filter: &Bound<'_, PyAny>,
+    ) -> PyResult<PyObject> {
         use flowgentra_ai::core::db::document::DocumentStore;
         let docs = run_async(self.inner.find(collection, pyobj_to_json(filter)?))
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
         let list = PyList::empty_bound(py);
-        for doc in docs { list.append(json_to_py(py, &doc)?)?; }
+        for doc in docs {
+            list.append(json_to_py(py, &doc)?)?;
+        }
         Ok(list.into())
     }
 
@@ -384,5 +463,7 @@ impl PyElasticsearchDocumentStore {
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
     }
 
-    fn __repr__(&self) -> String { "ElasticsearchDocumentStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "ElasticsearchDocumentStore(...)".to_string()
+    }
 }

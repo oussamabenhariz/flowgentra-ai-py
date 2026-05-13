@@ -4,8 +4,8 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 
 use flowgentra_ai::core::agent::MemoryAwareAgent;
-use flowgentra_ai::ArcHandler;
 use flowgentra_ai::core::state::DynState;
+use flowgentra_ai::ArcHandler;
 
 use crate::agent::{scan_module_for_handlers, wrap_python_callable};
 use crate::error::to_py_err;
@@ -35,7 +35,10 @@ impl PyMemoryStats {
     fn __repr__(&self) -> String {
         format!(
             "MemoryStats(messages={}, user={}, assistant={}, ~tokens={})",
-            self.message_count, self.user_messages, self.assistant_messages, self.approximate_tokens
+            self.message_count,
+            self.user_messages,
+            self.assistant_messages,
+            self.approximate_tokens
         )
     }
 }
@@ -119,9 +122,7 @@ impl PyMemoryAwareAgent {
     /// Returns:
     ///     The agent's response string
     fn run_turn(&mut self, input: &str) -> PyResult<String> {
-        let result = 
-            crate::run_async(self.inner.run_turn(input))
-            .map_err(to_py_err)?;
+        let result = crate::run_async(self.inner.run_turn(input)).map_err(to_py_err)?;
         Ok(result)
     }
 
@@ -142,9 +143,6 @@ impl PyMemoryAwareAgent {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "MemoryAwareAgent(thread_id='{}')",
-            self.inner.thread_id()
-        )
+        format!("MemoryAwareAgent(thread_id='{}')", self.inner.thread_id())
     }
 }

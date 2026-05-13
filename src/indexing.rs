@@ -27,12 +27,12 @@ use std::sync::Arc;
 use pyo3::prelude::*;
 
 use flowgentra_ai::core::rag::{
-    indexing::{CleanupMode, InMemoryRecordManager, IndexStats, RecordEntry, RecordManager, index},
+    indexing::{index, CleanupMode, InMemoryRecordManager, IndexStats, RecordEntry, RecordManager},
     vector_db::VectorStoreError,
 };
 
-use crate::run_async;
 use crate::rag::PyDocument;
+use crate::run_async;
 use crate::vector_store::{PyEmbeddings, PyInMemoryVectorStore};
 
 fn to_py_err(e: VectorStoreError) -> PyErr {
@@ -56,15 +56,27 @@ pub struct PyCleanupMode {
 impl PyCleanupMode {
     /// Never delete; only skip already-indexed duplicates.
     #[staticmethod]
-    fn none() -> Self { Self { inner: CleanupMode::None } }
+    fn none() -> Self {
+        Self {
+            inner: CleanupMode::None,
+        }
+    }
 
     /// Delete source docs no longer present in the input batch.
     #[staticmethod]
-    fn incremental() -> Self { Self { inner: CleanupMode::Incremental } }
+    fn incremental() -> Self {
+        Self {
+            inner: CleanupMode::Incremental,
+        }
+    }
 
     /// Wipe the entire namespace then re-index from scratch.
     #[staticmethod]
-    fn full() -> Self { Self { inner: CleanupMode::Full } }
+    fn full() -> Self {
+        Self {
+            inner: CleanupMode::Full,
+        }
+    }
 
     fn __repr__(&self) -> String {
         match self.inner {
@@ -94,16 +106,24 @@ pub struct PyIndexStats {
 #[pymethods]
 impl PyIndexStats {
     #[getter]
-    fn added(&self) -> usize { self.inner.added }
+    fn added(&self) -> usize {
+        self.inner.added
+    }
 
     #[getter]
-    fn updated(&self) -> usize { self.inner.updated }
+    fn updated(&self) -> usize {
+        self.inner.updated
+    }
 
     #[getter]
-    fn skipped(&self) -> usize { self.inner.skipped }
+    fn skipped(&self) -> usize {
+        self.inner.skipped
+    }
 
     #[getter]
-    fn deleted(&self) -> usize { self.inner.deleted }
+    fn deleted(&self) -> usize {
+        self.inner.deleted
+    }
 
     fn __repr__(&self) -> String {
         format!(
@@ -131,19 +151,30 @@ pub struct PyRecordEntry {
 #[pymethods]
 impl PyRecordEntry {
     #[getter]
-    fn doc_id(&self) -> &str { &self.inner.doc_id }
+    fn doc_id(&self) -> &str {
+        &self.inner.doc_id
+    }
 
     #[getter]
-    fn hash(&self) -> &str { &self.inner.hash }
+    fn hash(&self) -> &str {
+        &self.inner.hash
+    }
 
     #[getter]
-    fn indexed_at(&self) -> i64 { self.inner.indexed_at }
+    fn indexed_at(&self) -> i64 {
+        self.inner.indexed_at
+    }
 
     #[getter]
-    fn source(&self) -> &str { &self.inner.source }
+    fn source(&self) -> &str {
+        &self.inner.source
+    }
 
     fn __repr__(&self) -> String {
-        format!("RecordEntry(doc_id='{}', source='{}')", self.inner.doc_id, self.inner.source)
+        format!(
+            "RecordEntry(doc_id='{}', source='{}')",
+            self.inner.doc_id, self.inner.source
+        )
     }
 }
 
@@ -181,7 +212,9 @@ impl PyInMemoryRecordManager {
 
     /// Return the namespace this manager operates under.
     #[getter]
-    fn namespace(&self) -> &str { self.inner.namespace() }
+    fn namespace(&self) -> &str {
+        self.inner.namespace()
+    }
 
     /// Check if a hash already exists in the namespace.
     fn exists(&self, hash: &str) -> PyResult<bool> {
@@ -194,7 +227,10 @@ impl PyInMemoryRecordManager {
     fn list_records(&self) -> PyResult<Vec<PyRecordEntry>> {
         let inner = self.inner.clone();
         let records = run_async(async move { inner.list_records().await }).map_err(to_py_err)?;
-        Ok(records.into_iter().map(|r| PyRecordEntry { inner: r }).collect())
+        Ok(records
+            .into_iter()
+            .map(|r| PyRecordEntry { inner: r })
+            .collect())
     }
 
     /// Delete all records in this namespace.
@@ -204,7 +240,10 @@ impl PyInMemoryRecordManager {
     }
 
     fn __repr__(&self) -> String {
-        format!("InMemoryRecordManager(namespace='{}')", self.inner.namespace())
+        format!(
+            "InMemoryRecordManager(namespace='{}')",
+            self.inner.namespace()
+        )
     }
 }
 
@@ -260,10 +299,11 @@ pub fn py_index_documents(
 
     let rm = record_manager.inner.clone();
     let store_arc = store.inner.clone();
-    let stats = run_async(async move {
-        index(rust_docs, rm.as_ref(), store_arc.as_ref(), cleanup_mode).await
-    })
-    .map_err(to_py_err)?;
+    let stats =
+        run_async(
+            async move { index(rust_docs, rm.as_ref(), store_arc.as_ref(), cleanup_mode).await },
+        )
+        .map_err(to_py_err)?;
 
     Ok(PyIndexStats { inner: stats })
 }

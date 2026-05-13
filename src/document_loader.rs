@@ -2,7 +2,7 @@
 
 use pyo3::prelude::*;
 
-use flowgentra_ai::core::rag::{load_document, load_directory, FileType, LoadedDocument};
+use flowgentra_ai::core::rag::{load_directory, load_document, FileType, LoadedDocument};
 
 use crate::error::to_py_err_generic;
 
@@ -30,27 +30,37 @@ impl PyFileType {
 
     #[staticmethod]
     fn plain_text() -> Self {
-        PyFileType { inner: FileType::PlainText }
+        PyFileType {
+            inner: FileType::PlainText,
+        }
     }
 
     #[staticmethod]
     fn markdown() -> Self {
-        PyFileType { inner: FileType::Markdown }
+        PyFileType {
+            inner: FileType::Markdown,
+        }
     }
 
     #[staticmethod]
     fn html() -> Self {
-        PyFileType { inner: FileType::Html }
+        PyFileType {
+            inner: FileType::Html,
+        }
     }
 
     #[staticmethod]
     fn pdf() -> Self {
-        PyFileType { inner: FileType::Pdf }
+        PyFileType {
+            inner: FileType::Pdf,
+        }
     }
 
     #[staticmethod]
     fn unknown() -> Self {
-        PyFileType { inner: FileType::Unknown }
+        PyFileType {
+            inner: FileType::Unknown,
+        }
     }
 
     fn __repr__(&self) -> String {

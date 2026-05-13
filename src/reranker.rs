@@ -3,8 +3,7 @@
 use pyo3::prelude::*;
 
 use flowgentra_ai::core::rag::{
-    NoopReranker, RRFReranker, CrossEncoderReranker,
-    Reranker, SearchResult,
+    CrossEncoderReranker, NoopReranker, RRFReranker, Reranker, SearchResult,
 };
 
 use crate::error::to_py_err_generic;
@@ -30,10 +29,11 @@ impl PyNoopReranker {
     /// Rerank results (no-op, returns as-is).
     fn rerank(&self, query: &str, results: Vec<PySearchResult>) -> PyResult<Vec<PySearchResult>> {
         let rs: Vec<SearchResult> = results.into_iter().map(|r| r.inner).collect();
-        let out = 
-            crate::run_async(self.inner.rerank(query, rs))
-            .map_err(to_py_err_generic)?;
-        Ok(out.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        let out = crate::run_async(self.inner.rerank(query, rs)).map_err(to_py_err_generic)?;
+        Ok(out
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     fn __repr__(&self) -> String {
@@ -70,7 +70,9 @@ impl PyRRFReranker {
             .map(|l| l.into_iter().map(|r| r.inner).collect())
             .collect();
         let out = self.inner.fuse(lists);
-        out.into_iter().map(|r| PySearchResult { inner: r }).collect()
+        out.into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect()
     }
 
     fn __repr__(&self) -> String {
@@ -105,10 +107,11 @@ impl PyCrossEncoderReranker {
     /// Rerank search results using the cross-encoder model.
     fn rerank(&self, query: &str, results: Vec<PySearchResult>) -> PyResult<Vec<PySearchResult>> {
         let rs: Vec<SearchResult> = results.into_iter().map(|r| r.inner).collect();
-        let out = 
-            crate::run_async(self.inner.rerank(query, rs))
-            .map_err(to_py_err_generic)?;
-        Ok(out.into_iter().map(|r| PySearchResult { inner: r }).collect())
+        let out = crate::run_async(self.inner.rerank(query, rs)).map_err(to_py_err_generic)?;
+        Ok(out
+            .into_iter()
+            .map(|r| PySearchResult { inner: r })
+            .collect())
     }
 
     fn __repr__(&self) -> String {

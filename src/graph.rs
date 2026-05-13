@@ -5,32 +5,29 @@
 //! update dict. The graph merges partial updates back into the state.
 //! graph.invoke({...}) accepts and returns plain Python dicts.
 
-use pyo3::prelude::*;
-use pyo3::exceptions::PyKeyError;
 use crate::error::ValidationError;
+use pyo3::exceptions::PyKeyError;
+use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use flowgentra_ai::core::state::{DynState, DynStateUpdate, Context};
-use flowgentra_ai::core::state_graph::{
-    StateGraph, StateGraphBuilder, StateGraphError,
-    edge::END,
-    node::Node,
-    FileCheckpointer,
-};
 use flowgentra_ai::core::middleware::Middleware;
 use flowgentra_ai::core::observability::events::EventBroadcaster;
+use flowgentra_ai::core::state::{Context, DynState, DynStateUpdate};
+use flowgentra_ai::core::state_graph::{
+    edge::END, node::Node, FileCheckpointer, StateGraph, StateGraphBuilder, StateGraphError,
+};
 
 use flowgentra_ai::core::observability::visualization::ExecutionTracer;
 
-use crate::channel::{ChannelType, apply_channel_reducer};
-use crate::py_reducers::extract_reducers_from_class;
-use crate::llm::PyLLM;
-use crate::builtin_node_bindings::{RetryGraphNode, TimeoutGraphNode, LLMGraphNode};
-use crate::planner_node::create_planner_graph_node;
+use crate::builtin_node_bindings::{LLMGraphNode, RetryGraphNode, TimeoutGraphNode};
+use crate::channel::{apply_channel_reducer, ChannelType};
 use crate::evaluation_node::{EvaluationGraphNode, PyEvaluationNodeConfig};
+use crate::llm::PyLLM;
 use crate::observability::PyExecutionTracer;
+use crate::planner_node::create_planner_graph_node;
+use crate::py_reducers::extract_reducers_from_class;
 
 // ─── Error conversion ──────────────────────────────────────────────────────
 
@@ -89,9 +86,9 @@ fn extract_schema_fields(state_class: &Bound<'_, PyAny>) -> PyResult<Vec<String>
                  builder = StateGraph(State)",
             )
         })?;
-        let dict = ann.downcast::<PyDict>().map_err(|_| {
-            ValidationError::new_err("__annotations__ must be a dict")
-        })?;
+        let dict = ann
+            .downcast::<PyDict>()
+            .map_err(|_| ValidationError::new_err("__annotations__ must be a dict"))?;
         for (k, _) in dict.iter() {
             let key: String = k.extract()?;
             if seen.insert(key.clone()) {
@@ -120,7 +117,10 @@ fn extract_schema_fields(state_class: &Bound<'_, PyAny>) -> PyResult<Vec<String>
 ///
 /// Falls back to treating all annotated fields as required for non-TypedDict
 /// classes that lack the attribute.
-fn extract_required_fields(state_class: &Bound<'_, PyAny>, all_fields: &[String]) -> HashSet<String> {
+fn extract_required_fields(
+    state_class: &Bound<'_, PyAny>,
+    all_fields: &[String],
+) -> HashSet<String> {
     if let Ok(required_keys) = state_class.getattr("__required_keys__") {
         if let Ok(iter) = required_keys.iter() {
             let mut set = HashSet::new();
@@ -154,13 +154,11 @@ fn compute_subgraph_field_delta(
 ) -> Option<serde_json::Value> {
     use serde_json::Value;
     match &old {
-        None => Some(new),                         // new key produced by subgraph
-        Some(old_val) if old_val == &new => None,  // unchanged — skip
+        None => Some(new),                        // new key produced by subgraph
+        Some(old_val) if old_val == &new => None, // unchanged — skip
         Some(Value::Array(old_arr)) => {
             if let Value::Array(ref new_arr) = new {
-                if new_arr.len() > old_arr.len()
-                    && new_arr[..old_arr.len()] == old_arr[..]
-                {
+                if new_arr.len() > old_arr.len() && new_arr[..old_arr.len()] == old_arr[..] {
                     // Pure append: return only the freshly added items so the
                     // parent's Append reducer extends the list correctly.
                     Some(Value::Array(new_arr[old_arr.len()..].to_vec()))
@@ -230,7 +228,11 @@ struct ArcSubgraphNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for ArcSubgraphNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         let input = state.clone();
         let result = self.subgraph.invoke(input.clone()).await?;
         // Issue #2: returning ALL result keys caused double-counting for Append/Sum
@@ -265,12 +267,17 @@ struct TracingNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for TracingNode {
-    async fn execute(&self, state: &DynState, ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         let start = std::time::Instant::now();
         self.tracer.trace_node_start(&self.node_name);
         let result = self.inner.execute(state, ctx).await;
         let success = result.is_ok();
-        self.tracer.trace_node_end(&self.node_name, start.elapsed(), success);
+        self.tracer
+            .trace_node_end(&self.node_name, start.elapsed(), success);
         result
     }
 
@@ -308,6 +315,7 @@ impl Node<DynState> for TracingNode {
 struct PyFunctionNode {
     name: String,
     func: PyObject,
+    #[allow(dead_code)]
     schema_fields: Arc<Vec<String>>,
     /// O(1) lookup set built from schema_fields at construction time (issue #16).
     schema_set: Arc<HashSet<String>>,
@@ -317,7 +325,11 @@ struct PyFunctionNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for PyFunctionNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         let state_clone = state.clone();
         let schema_set = self.schema_set.clone();
         let channel_schemas = self.channel_schemas.clone();
@@ -359,9 +371,7 @@ impl Node<DynState> for PyFunctionNode {
                     let key: String = k.extract()?;
                     let new_val = crate::py_to_json(&v)?;
 
-                    let channel_type = channel_schemas
-                        .get(&key)
-                        .unwrap_or(&ChannelType::LastValue);
+                    let channel_type = channel_schemas.get(&key).unwrap_or(&ChannelType::LastValue);
 
                     let merged_val = match channel_type {
                         ChannelType::LastValue => new_val,
@@ -399,6 +409,7 @@ impl Node<DynState> for PyFunctionNode {
 ///
 /// The callable receives the current state as a plain dict and must return a
 /// str — either a node name or `"__end__"`.
+#[allow(clippy::type_complexity)]
 fn make_router_fn(
     py_func: PyObject,
 ) -> Box<dyn Fn(&DynState) -> Result<String, StateGraphError> + Send + Sync> {
@@ -406,24 +417,25 @@ fn make_router_fn(
         Python::with_gil(|py| -> Result<String, StateGraphError> {
             let func = py_func.clone_ref(py);
 
-            let state_dict = dynstate_to_pydict(py, state).map_err(|e| {
-                StateGraphError::ExecutionError {
+            let state_dict =
+                dynstate_to_pydict(py, state).map_err(|e| StateGraphError::ExecutionError {
                     node: "router".into(),
                     reason: format!("Failed to convert state to dict: {}", e),
-                }
-            })?;
+                })?;
 
-            let py_result = func.call1(py, (state_dict,)).map_err(|e| {
-                StateGraphError::ExecutionError {
+            let py_result =
+                func.call1(py, (state_dict,))
+                    .map_err(|e| StateGraphError::ExecutionError {
+                        node: "router".into(),
+                        reason: format!("Python router error: {}", e),
+                    })?;
+
+            py_result
+                .extract(py)
+                .map_err(|e| StateGraphError::ExecutionError {
                     node: "router".into(),
-                    reason: format!("Python router error: {}", e),
-                }
-            })?;
-
-            py_result.extract(py).map_err(|e| StateGraphError::ExecutionError {
-                node: "router".into(),
-                reason: format!("Router must return a str (node name): {}", e),
-            })
+                    reason: format!("Router must return a str (node name): {}", e),
+                })
         })
     })
 }
@@ -499,8 +511,7 @@ impl PyStateGraphBuilder {
         // Issue #3: respect total=False by reading __required_keys__ from TypedDict.
         let required_fields = extract_required_fields(state_class, &schema_fields);
         // Extract per-field reducer strategies from __reducers__ or Annotated hints.
-        let channel_schemas = extract_reducers_from_class(py, state_class)
-            .unwrap_or_default();
+        let channel_schemas = extract_reducers_from_class(py, state_class).unwrap_or_default();
         Ok(PyStateGraphBuilder {
             schema_fields: Arc::new(schema_fields),
             schema_set: Arc::new(schema_set),
@@ -576,13 +587,15 @@ impl PyStateGraphBuilder {
 
     /// Add a compiled subgraph as a node.
     fn add_subgraph(&mut self, name: &str, subgraph: &PyCompiledGraph) {
-        self.subgraphs.push((name.to_string(), subgraph.inner.clone()));
+        self.subgraphs
+            .push((name.to_string(), subgraph.inner.clone()));
     }
 
     /// Add a retry node backed by a Python callable.
     ///
     /// Retries the callable up to `max_retries` times with exponential backoff.
     /// Callable signature: `(state: dict) -> dict`
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (name, func, max_retries=3, backoff_ms=1000, backoff_multiplier=2.0, max_backoff_ms=30000))]
     fn add_retry_node(
         &mut self,
@@ -654,12 +667,7 @@ impl PyStateGraphBuilder {
 
     /// Add a planner node (LLM-driven dynamic routing).
     #[pyo3(signature = (name, llm, prompt=None))]
-    fn add_planner_node(
-        &mut self,
-        name: &str,
-        llm: &PyLLM,
-        prompt: Option<String>,
-    ) {
+    fn add_planner_node(&mut self, name: &str, llm: &PyLLM, prompt: Option<String>) {
         let node = create_planner_graph_node(name, llm.inner.clone(), prompt);
         self.nodes.push((name.to_string(), node));
     }
@@ -806,27 +814,28 @@ impl PyStateGraphBuilder {
     ///             return "continue"
     ///     builder.use_middleware(MyMW())
     fn use_middleware(&mut self, mw: &Bound<'_, PyAny>) -> PyResult<()> {
-        let arc: Arc<dyn Middleware<DynState>> =
-            if let Ok(logging) = mw.extract::<PyRef<crate::middleware::PyLoggingMiddleware>>() {
-                logging.as_dyn()
-            } else if let Ok(metrics) = mw.extract::<PyRef<crate::middleware::PyMetricsMiddleware>>() {
-                metrics.as_dyn()
-            } else if mw.hasattr("before_node")? || mw.hasattr("after_node")? {
-                let name = mw
-                    .getattr("__class__")
-                    .and_then(|c| c.getattr("__name__"))
-                    .and_then(|n| n.extract::<String>())
-                    .ok();
-                Arc::new(crate::middleware::PyObjectMiddleware::new(
-                    mw.clone().unbind(),
-                    name,
-                ))
-            } else {
-                return Err(crate::error::ValidationError::new_err(
-                    "use_middleware: expected LoggingMiddleware, MetricsMiddleware, \
+        let arc: Arc<dyn Middleware<DynState>> = if let Ok(logging) =
+            mw.extract::<PyRef<crate::middleware::PyLoggingMiddleware>>()
+        {
+            logging.as_dyn()
+        } else if let Ok(metrics) = mw.extract::<PyRef<crate::middleware::PyMetricsMiddleware>>() {
+            metrics.as_dyn()
+        } else if mw.hasattr("before_node")? || mw.hasattr("after_node")? {
+            let name = mw
+                .getattr("__class__")
+                .and_then(|c| c.getattr("__name__"))
+                .and_then(|n| n.extract::<String>())
+                .ok();
+            Arc::new(crate::middleware::PyObjectMiddleware::new(
+                mw.clone().unbind(),
+                name,
+            ))
+        } else {
+            return Err(crate::error::ValidationError::new_err(
+                "use_middleware: expected LoggingMiddleware, MetricsMiddleware, \
                      or an object with before_node / after_node methods",
-                ));
-            };
+            ));
+        };
         self.middleware.push(arc);
         Ok(())
     }
@@ -839,12 +848,14 @@ impl PyStateGraphBuilder {
     ///
     /// Raises RuntimeError if the graph is invalid (missing entry point, etc.).
     #[pyo3(signature = (tracer=None))]
-    fn compile(&self, py: Python<'_>, tracer: Option<&PyExecutionTracer>) -> PyResult<PyCompiledGraph> {
+    fn compile(
+        &self,
+        py: Python<'_>,
+        tracer: Option<&PyExecutionTracer>,
+    ) -> PyResult<PyCompiledGraph> {
         // Issue #15: validate interrupt node names at compile time — a typo
         // causes silent failure at runtime (the interrupt never fires).
-        let node_name_set: HashSet<&str> = self.nodes.iter()
-            .map(|(n, _)| n.as_str())
-            .collect();
+        let node_name_set: HashSet<&str> = self.nodes.iter().map(|(n, _)| n.as_str()).collect();
 
         for name in &self.interrupt_before {
             if !node_name_set.contains(name.as_str()) {
@@ -916,7 +927,10 @@ impl PyStateGraphBuilder {
 
         if let Some(ref path) = self.checkpointer_path {
             let cp = FileCheckpointer::new(path).map_err(|e| {
-                crate::error::InternalError::new_err(format!("Failed to create checkpointer: {}", e))
+                crate::error::InternalError::new_err(format!(
+                    "Failed to create checkpointer: {}",
+                    e
+                ))
             })?;
             builder = builder.set_checkpointer(Arc::new(cp));
         }
@@ -971,6 +985,7 @@ pub struct PyCompiledGraph {
     /// Required fields only — respects TypedDict `total=False` (issue #3).
     pub(crate) required_fields: Arc<HashSet<String>>,
     /// Per-field reducer strategies — stored for potential future use by external tooling.
+    #[allow(dead_code)]
     pub(crate) channel_schemas: Arc<HashMap<String, ChannelType>>,
 }
 
@@ -997,7 +1012,8 @@ impl PyCompiledGraph {
         self.validate_input(input_dict)?;
         let initial = pydict_to_dynstate(input_dict)?;
         let fut = self.inner.invoke(initial);
-        let result = py.allow_threads(|| crate::run_async(fut))
+        let result = py
+            .allow_threads(|| crate::run_async(fut))
             .map_err(sg_err_to_py)?;
         self.state_to_output_dict(py, &result)
     }
@@ -1012,7 +1028,8 @@ impl PyCompiledGraph {
         self.validate_input(input_dict)?;
         let initial = pydict_to_dynstate(input_dict)?;
         let fut = self.inner.invoke_with_id(thread_id.to_string(), initial);
-        let result = py.allow_threads(|| crate::run_async(fut))
+        let result = py
+            .allow_threads(|| crate::run_async(fut))
             .map_err(sg_err_to_py)?;
         self.state_to_output_dict(py, &result)
     }
@@ -1020,7 +1037,8 @@ impl PyCompiledGraph {
     /// Resume a previously interrupted graph from its checkpoint.
     fn resume(&self, py: Python<'_>, thread_id: &str) -> PyResult<PyObject> {
         let fut = self.inner.resume(thread_id);
-        let result = py.allow_threads(|| crate::run_async(fut))
+        let result = py
+            .allow_threads(|| crate::run_async(fut))
             .map_err(sg_err_to_py)?;
         self.state_to_output_dict(py, &result)
     }
@@ -1053,7 +1071,8 @@ impl PyCompiledGraph {
             state_update.insert(key, val);
         }
         let fut = self.inner.resume_with_update(thread_id, state_update);
-        let result = py.allow_threads(|| crate::run_async(fut))
+        let result = py
+            .allow_threads(|| crate::run_async(fut))
             .map_err(sg_err_to_py)?;
         self.state_to_output_dict(py, &result)
     }
@@ -1102,7 +1121,8 @@ impl PyCompiledGraph {
     /// Each entry is a dict with keys: step_id, state, created_at, metadata.
     fn get_state_history(&self, py: Python<'_>, thread_id: &str) -> PyResult<PyObject> {
         let fut = self.inner.history(thread_id);
-        let history = py.allow_threads(|| crate::run_async(fut))
+        let history = py
+            .allow_threads(|| crate::run_async(fut))
             .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))?;
 
         let list = pyo3::types::PyList::empty_bound(py);
@@ -1174,6 +1194,7 @@ impl PyCompiledGraph {
 pub const PY_END: &str = END;
 
 /// Free function to get the END constant from Python.
+#[allow(dead_code)]
 #[pyfunction]
 pub fn graph_end() -> String {
     END.to_string()

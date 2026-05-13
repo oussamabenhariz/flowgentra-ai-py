@@ -88,10 +88,14 @@ impl PyStoredDocument {
     }
 
     #[getter]
-    fn id(&self) -> &str { &self.inner.id }
+    fn id(&self) -> &str {
+        &self.inner.id
+    }
 
     #[getter]
-    fn text(&self) -> &str { &self.inner.text }
+    fn text(&self) -> &str {
+        &self.inner.text
+    }
 
     #[getter]
     fn metadata(&self, py: Python<'_>) -> PyResult<PyObject> {
@@ -101,7 +105,11 @@ impl PyStoredDocument {
     }
 
     fn __repr__(&self) -> String {
-        format!("StoredDocument(id='{}', len={})", self.inner.id, self.inner.text.len())
+        format!(
+            "StoredDocument(id='{}', len={})",
+            self.inner.id,
+            self.inner.text.len()
+        )
     }
 }
 
@@ -129,7 +137,9 @@ impl PyInMemoryDocStore {
     /// Create an empty in-memory document store.
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(InMemoryDocStore::new()) }
+        Self {
+            inner: Arc::new(InMemoryDocStore::new()),
+        }
     }
 
     /// Store a single document.
@@ -210,7 +220,9 @@ impl PyInMemoryDocStore {
     }
 
     /// Number of stored documents.
-    fn __len__(&self) -> usize { self.inner.len() }
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
 
     fn __repr__(&self) -> String {
         format!("InMemoryDocStore(n={})", self.inner.len())
@@ -243,7 +255,9 @@ impl PyLocalFileDocStore {
     ///     dir: Directory path. Created if it does not exist.
     #[new]
     fn new(dir: &str) -> Self {
-        Self { inner: Arc::new(LocalFileDocStore::new(dir)) }
+        Self {
+            inner: Arc::new(LocalFileDocStore::new(dir)),
+        }
     }
 
     /// Store a single document.
@@ -307,5 +321,7 @@ impl PyLocalFileDocStore {
         run_async(async move { inner.yield_keys().await }).map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { "LocalFileDocStore(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "LocalFileDocStore(...)".to_string()
+    }
 }

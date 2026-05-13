@@ -17,14 +17,14 @@
 //! # stored as "tenant-1:thread-1" internally
 //! ```
 
-use pyo3::prelude::*;
 use pyo3::exceptions::PyConnectionError;
+use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::error::{CheckpointError, SerializationError};
 
-use flowgentra_ai::core::memory::CheckpointMetadata;
 use flowgentra_ai::core::memory::async_checkpointer::{AsyncCheckpointer, CheckpointHistoryEntry};
+use flowgentra_ai::core::memory::CheckpointMetadata;
 use flowgentra_ai::core::state::DynState;
 
 use crate::memory::{PyCheckpoint, PyCheckpointMetadata};
@@ -48,7 +48,9 @@ fn entry_to_py(entry: CheckpointHistoryEntry) -> PyCheckpointHistoryEntry {
         thread_id: entry.thread_id,
         namespace: entry.namespace,
         saved_at: entry.saved_at,
-        checkpoint: PyCheckpoint { inner: entry.checkpoint },
+        checkpoint: PyCheckpoint {
+            inner: entry.checkpoint,
+        },
     }
 }
 
@@ -74,20 +76,30 @@ pub struct PyCheckpointHistoryEntry {
 #[pymethods]
 impl PyCheckpointHistoryEntry {
     #[getter]
-    fn thread_id(&self) -> &str { &self.thread_id }
+    fn thread_id(&self) -> &str {
+        &self.thread_id
+    }
 
     #[getter]
-    fn namespace(&self) -> Option<&str> { self.namespace.as_deref() }
+    fn namespace(&self) -> Option<&str> {
+        self.namespace.as_deref()
+    }
 
     #[getter]
-    fn saved_at(&self) -> i64 { self.saved_at }
+    fn saved_at(&self) -> i64 {
+        self.saved_at
+    }
 
     #[getter]
-    fn checkpoint(&self) -> PyCheckpoint { self.checkpoint.clone() }
+    fn checkpoint(&self) -> PyCheckpoint {
+        self.checkpoint.clone()
+    }
 
     #[getter]
     fn metadata(&self) -> PyCheckpointMetadata {
-        PyCheckpointMetadata { inner: self.checkpoint.inner.metadata.clone() }
+        PyCheckpointMetadata {
+            inner: self.checkpoint.inner.metadata.clone(),
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -128,9 +140,9 @@ impl PySqliteAsyncCheckpointer {
     ///          ``"sqlite::memory:"`` for a temporary in-memory store.
     #[new]
     fn new(url: &str) -> PyResult<Self> {
-        let inner = crate::run_async(
-            flowgentra_ai::core::memory::AsyncSqliteCheckpointer::new(url)
-        )
+        let inner = crate::run_async(flowgentra_ai::core::memory::AsyncSqliteCheckpointer::new(
+            url,
+        ))
         .map_err(|e| PyConnectionError::new_err(format!("SQLite connect failed: {e}")))?;
         Ok(Self { inner })
     }
@@ -142,7 +154,12 @@ impl PySqliteAsyncCheckpointer {
     ///     state_dict: Dict of state fields to persist.
     ///     last_node:  Optional name of the last executed node (stored in metadata).
     #[pyo3(signature = (thread_id, state_dict, last_node = None))]
-    fn save(&self, thread_id: &str, state_dict: &Bound<'_, PyDict>, last_node: Option<&str>) -> PyResult<()> {
+    fn save(
+        &self,
+        thread_id: &str,
+        state_dict: &Bound<'_, PyDict>,
+        last_node: Option<&str>,
+    ) -> PyResult<()> {
         let state = dict_to_dynstate(state_dict)?;
         let meta = make_metadata(last_node);
         crate::run_async(self.inner.save(thread_id, &state, &meta))
@@ -212,15 +229,20 @@ impl PyPostgresAsyncCheckpointer {
     ///          ``"postgres://user:pass@localhost/mydb"``.
     #[new]
     fn new(url: &str) -> PyResult<Self> {
-        let inner = crate::run_async(
-            flowgentra_ai::core::memory::AsyncPostgresCheckpointer::new(url)
-        )
+        let inner = crate::run_async(flowgentra_ai::core::memory::AsyncPostgresCheckpointer::new(
+            url,
+        ))
         .map_err(|e| PyConnectionError::new_err(format!("Postgres connect failed: {e}")))?;
         Ok(Self { inner })
     }
 
     #[pyo3(signature = (thread_id, state_dict, last_node = None))]
-    fn save(&self, thread_id: &str, state_dict: &Bound<'_, PyDict>, last_node: Option<&str>) -> PyResult<()> {
+    fn save(
+        &self,
+        thread_id: &str,
+        state_dict: &Bound<'_, PyDict>,
+        last_node: Option<&str>,
+    ) -> PyResult<()> {
         let state = dict_to_dynstate(state_dict)?;
         let meta = make_metadata(last_node);
         crate::run_async(self.inner.save(thread_id, &state, &meta))
@@ -286,15 +308,20 @@ impl PyRedisAsyncCheckpointer {
     #[new]
     #[pyo3(signature = (url, ttl_secs = None))]
     fn new(url: &str, ttl_secs: Option<u64>) -> PyResult<Self> {
-        let inner = crate::run_async(
-            flowgentra_ai::core::memory::AsyncRedisCheckpointer::new(url, ttl_secs)
-        )
+        let inner = crate::run_async(flowgentra_ai::core::memory::AsyncRedisCheckpointer::new(
+            url, ttl_secs,
+        ))
         .map_err(|e| PyConnectionError::new_err(format!("Redis connect failed: {e}")))?;
         Ok(Self { inner })
     }
 
     #[pyo3(signature = (thread_id, state_dict, last_node = None))]
-    fn save(&self, thread_id: &str, state_dict: &Bound<'_, PyDict>, last_node: Option<&str>) -> PyResult<()> {
+    fn save(
+        &self,
+        thread_id: &str,
+        state_dict: &Bound<'_, PyDict>,
+        last_node: Option<&str>,
+    ) -> PyResult<()> {
         let state = dict_to_dynstate(state_dict)?;
         let meta = make_metadata(last_node);
         crate::run_async(self.inner.save(thread_id, &state, &meta))
@@ -364,15 +391,20 @@ impl PyMongoAsyncCheckpointer {
     #[new]
     #[pyo3(signature = (url, db_name = "flowgentra", collection = "checkpoints"))]
     fn new(url: &str, db_name: &str, collection: &str) -> PyResult<Self> {
-        let inner = crate::run_async(
-            flowgentra_ai::core::memory::AsyncMongoCheckpointer::new(url, db_name, collection)
-        )
+        let inner = crate::run_async(flowgentra_ai::core::memory::AsyncMongoCheckpointer::new(
+            url, db_name, collection,
+        ))
         .map_err(|e| PyConnectionError::new_err(format!("MongoDB connect failed: {e}")))?;
         Ok(Self { inner })
     }
 
     #[pyo3(signature = (thread_id, state_dict, last_node = None))]
-    fn save(&self, thread_id: &str, state_dict: &Bound<'_, PyDict>, last_node: Option<&str>) -> PyResult<()> {
+    fn save(
+        &self,
+        thread_id: &str,
+        state_dict: &Bound<'_, PyDict>,
+        last_node: Option<&str>,
+    ) -> PyResult<()> {
         let state = dict_to_dynstate(state_dict)?;
         let meta = make_metadata(last_node);
         crate::run_async(self.inner.save(thread_id, &state, &meta))
@@ -434,15 +466,20 @@ impl PyMySqlAsyncCheckpointer {
     ///     url: MySQL connection URL, e.g. ``"mysql://user:pass@localhost/mydb"``.
     #[new]
     fn new(url: &str) -> PyResult<Self> {
-        let inner = crate::run_async(
-            flowgentra_ai::core::memory::AsyncMysqlCheckpointer::new(url)
-        )
+        let inner = crate::run_async(flowgentra_ai::core::memory::AsyncMysqlCheckpointer::new(
+            url,
+        ))
         .map_err(|e| PyConnectionError::new_err(format!("MySQL connect failed: {e}")))?;
         Ok(Self { inner })
     }
 
     #[pyo3(signature = (thread_id, state_dict, last_node = None))]
-    fn save(&self, thread_id: &str, state_dict: &Bound<'_, PyDict>, last_node: Option<&str>) -> PyResult<()> {
+    fn save(
+        &self,
+        thread_id: &str,
+        state_dict: &Bound<'_, PyDict>,
+        last_node: Option<&str>,
+    ) -> PyResult<()> {
         let state = dict_to_dynstate(state_dict)?;
         let meta = make_metadata(last_node);
         crate::run_async(self.inner.save(thread_id, &state, &meta))
@@ -546,11 +583,9 @@ impl PyNamespacedCheckpointer {
         if let Some(node) = last_node {
             kwargs.set_item("last_node", node)?;
         }
-        self.inner.bind(py).call_method(
-            "save",
-            (scoped.as_str(), state_dict),
-            Some(&kwargs),
-        )?;
+        self.inner
+            .bind(py)
+            .call_method("save", (scoped.as_str(), state_dict), Some(&kwargs))?;
         Ok(())
     }
 
@@ -574,13 +609,15 @@ impl PyNamespacedCheckpointer {
     /// Return checkpoint history for the scoped thread ID.
     fn list_history(&self, py: Python<'_>, thread_id: &str) -> PyResult<PyObject> {
         let scoped = self.scoped_key(thread_id);
-        self.inner.call_method1(py, "list_history", (scoped.as_str(),))
+        self.inner
+            .call_method1(py, "list_history", (scoped.as_str(),))
     }
 
     /// Delete all checkpoints under the scoped thread ID.
     fn delete_thread(&self, py: Python<'_>, thread_id: &str) -> PyResult<()> {
         let scoped = self.scoped_key(thread_id);
-        self.inner.call_method1(py, "delete_thread", (scoped.as_str(),))?;
+        self.inner
+            .call_method1(py, "delete_thread", (scoped.as_str(),))?;
         Ok(())
     }
 

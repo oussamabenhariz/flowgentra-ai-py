@@ -2,7 +2,9 @@
 
 use pyo3::prelude::*;
 
-use flowgentra_ai::core::rag::{evaluate, hit_rate, mrr, mean_ndcg, EvalQuery, EvalResults, QueryResult};
+use flowgentra_ai::core::rag::{
+    evaluate, hit_rate, mean_ndcg, mrr, EvalQuery, EvalResults, QueryResult,
+};
 
 // ─── PyEvalQuery ───────────────────────────────────────────────────────────
 
@@ -85,10 +87,7 @@ impl PyQueryResult {
     fn __repr__(&self) -> String {
         format!(
             "QueryResult(query='{}', hit={}, rr={:.4}, ndcg={:.4})",
-            self.inner.query,
-            self.inner.hit,
-            self.inner.reciprocal_rank,
-            self.inner.ndcg
+            self.inner.query, self.inner.hit, self.inner.reciprocal_rank, self.inner.ndcg
         )
     }
 }
@@ -132,19 +131,14 @@ impl PyEvalResults {
         self.inner
             .per_query
             .iter()
-            .map(|q| PyQueryResult {
-                inner: q.clone(),
-            })
+            .map(|q| PyQueryResult { inner: q.clone() })
             .collect()
     }
 
     fn __repr__(&self) -> String {
         format!(
             "EvalResults(hit_rate={:.4}, mrr={:.4}, ndcg={:.4}, queries={})",
-            self.inner.hit_rate,
-            self.inner.mrr,
-            self.inner.ndcg,
-            self.inner.num_queries
+            self.inner.hit_rate, self.inner.mrr, self.inner.ndcg, self.inner.num_queries
         )
     }
 }

@@ -90,11 +90,16 @@ impl PyRetryNode {
                     let f = func.clone_ref(py);
                     let state_d = dynstate_to_pydict(py, &current_state)?;
                     let py_result = f.call1(py, (state_d,))?;
-                    let update = py_result.bind(py).downcast::<PyDict>().map_err(|_| {
-                        pyo3::exceptions::PyTypeError::new_err(format!(
-                            "RetryNode '{}' callable must return a dict", name
-                        ))
-                    })?.clone();
+                    let update = py_result
+                        .bind(py)
+                        .downcast::<PyDict>()
+                        .map_err(|_| {
+                            pyo3::exceptions::PyTypeError::new_err(format!(
+                                "RetryNode '{}' callable must return a dict",
+                                name
+                            ))
+                        })?
+                        .clone();
                     // Merge partial update (no schema validation in standalone mode)
                     let merged = current_state.clone();
                     for (k, v) in update.iter() {
@@ -120,9 +125,9 @@ impl PyRetryNode {
         });
 
         match result {
-            Ok(new_state) => Python::with_gil(|py| {
-                dynstate_to_pydict(py, &new_state).map(|d| d.into())
-            }),
+            Ok(new_state) => {
+                Python::with_gil(|py| dynstate_to_pydict(py, &new_state).map(|d| d.into()))
+            }
             Err(e) => Err(AgentExecutionError::new_err(format!(
                 "RetryNode '{}' failed after {} retries: {}",
                 self.name, self.max_retries, e
@@ -193,7 +198,8 @@ impl PyTimeoutNode {
                     let py_result = f.call1(py, (state_d,))?;
                     let update = py_result.downcast_bound::<PyDict>(py).map_err(|_| {
                         pyo3::exceptions::PyTypeError::new_err(format!(
-                            "TimeoutNode '{}' callable must return a dict", name
+                            "TimeoutNode '{}' callable must return a dict",
+                            name
                         ))
                     })?;
                     let merged = current_state.clone();
@@ -221,9 +227,9 @@ impl PyTimeoutNode {
         });
 
         match result {
-            Ok(new_state) => Python::with_gil(|py| {
-                dynstate_to_pydict(py, &new_state).map(|d| d.into())
-            }),
+            Ok(new_state) => {
+                Python::with_gil(|py| dynstate_to_pydict(py, &new_state).map(|d| d.into()))
+            }
             Err(e) => Err(AgentExecutionError::new_err(e)),
         }
     }
@@ -253,7 +259,11 @@ pub(crate) struct RetryGraphNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for RetryGraphNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         let schema_set = self.schema_set.clone();
         let schema_fields = self.schema_fields.clone();
         let node_name = self.name.clone();
@@ -279,11 +289,13 @@ impl Node<DynState> for RetryGraphNode {
                 Python::with_gil(|py| -> PyResult<pyo3::Py<PyDict>> {
                     let state_d = dynstate_to_pydict(py, &state_clone)?;
                     let py_result = func_clone.call1(py, (state_d,))?;
-                    py_result.downcast_bound::<PyDict>(py)
+                    py_result
+                        .downcast_bound::<PyDict>(py)
                         .map(|d| d.clone().unbind())
                         .map_err(|_| {
                             pyo3::exceptions::PyTypeError::new_err(format!(
-                                "RetryNode '{}' callable must return a dict", nn
+                                "RetryNode '{}' callable must return a dict",
+                                nn
                             ))
                         })
                 })
@@ -361,7 +373,11 @@ pub(crate) struct TimeoutGraphNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for TimeoutGraphNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         // Issue #1: the previous implementation wrapped `Python::with_gil(...)` —
         // a *synchronous* call — in an async block and then passed it to
         // `tokio::time::timeout`.  Because there are no `.await` points inside
@@ -388,7 +404,8 @@ impl Node<DynState> for TimeoutGraphNode {
                 let py_result = func.call1(py, (state_dict,))?;
                 let update = py_result.downcast_bound::<PyDict>(py).map_err(|_| {
                     pyo3::exceptions::PyTypeError::new_err(format!(
-                        "TimeoutNode '{}' callable must return a dict", node_name
+                        "TimeoutNode '{}' callable must return a dict",
+                        node_name
                     ))
                 })?;
                 // O(1) schema validation (issue #16)
@@ -456,7 +473,11 @@ pub(crate) struct LoopGraphNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for LoopGraphNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         // Snapshot as HashMap so we can mutate between iterations.
         let mut running: HashMap<String, serde_json::Value> = state
             .keys()
@@ -466,7 +487,9 @@ impl Node<DynState> for LoopGraphNode {
         let original = running.clone();
 
         let func = Python::with_gil(|py| self.func.clone_ref(py));
-        let break_cond = self.break_condition.as_ref()
+        let break_cond = self
+            .break_condition
+            .as_ref()
             .map(|bc| Python::with_gil(|py| bc.clone_ref(py)));
         let schema_set = self.schema_set.clone();
         let node_name = self.name.clone();
@@ -485,16 +508,21 @@ impl Node<DynState> for LoopGraphNode {
                             state_dict.set_item(k, crate::json_to_py(py, v)?)?;
                         }
                         let py_result = func_clone.call1(py, (state_dict,))?;
-                        let update_dict = py_result.downcast_bound::<pyo3::types::PyDict>(py)
-                            .map_err(|_| pyo3::exceptions::PyTypeError::new_err(format!(
-                                "LoopNode '{}' callable must return a dict", nn
-                            )))?;
+                        let update_dict = py_result
+                            .downcast_bound::<pyo3::types::PyDict>(py)
+                            .map_err(|_| {
+                                pyo3::exceptions::PyTypeError::new_err(format!(
+                                    "LoopNode '{}' callable must return a dict",
+                                    nn
+                                ))
+                            })?;
                         let mut result = HashMap::new();
                         for (k, v) in update_dict.iter() {
                             let key: String = k.extract()?;
                             if !ss.contains(&key) {
                                 return Err(ValidationError::new_err(format!(
-                                    "LoopNode '{}' returned unknown key '{}'", nn, key
+                                    "LoopNode '{}' returned unknown key '{}'",
+                                    nn, key
                                 )));
                             }
                             result.insert(key, crate::py_to_json(&v)?);
@@ -579,7 +607,11 @@ pub(crate) struct ParallelGraphNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for ParallelGraphNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         let schema_set = self.schema_set.clone();
         let node_name = self.name.clone();
 
@@ -596,10 +628,14 @@ impl Node<DynState> for ParallelGraphNode {
                 Python::with_gil(|py| -> PyResult<HashMap<String, serde_json::Value>> {
                     let state_dict = dynstate_to_pydict(py, &state_clone)?;
                     let py_result = func_clone.call1(py, (state_dict,))?;
-                    let update_dict = py_result.downcast_bound::<pyo3::types::PyDict>(py)
-                        .map_err(|_| pyo3::exceptions::PyTypeError::new_err(format!(
-                            "ParallelNode '{}' branch '{}' must return a dict", nn, bn
-                        )))?;
+                    let update_dict = py_result
+                        .downcast_bound::<pyo3::types::PyDict>(py)
+                        .map_err(|_| {
+                            pyo3::exceptions::PyTypeError::new_err(format!(
+                                "ParallelNode '{}' branch '{}' must return a dict",
+                                nn, bn
+                            ))
+                        })?;
                     let mut result = HashMap::new();
                     for (k, v) in update_dict.iter() {
                         let key: String = k.extract()?;
@@ -655,7 +691,11 @@ pub(crate) struct LLMGraphNode {
 
 #[async_trait::async_trait]
 impl Node<DynState> for LLMGraphNode {
-    async fn execute(&self, state: &DynState, _ctx: &Context) -> Result<DynStateUpdate, StateGraphError> {
+    async fn execute(
+        &self,
+        state: &DynState,
+        _ctx: &Context,
+    ) -> Result<DynStateUpdate, StateGraphError> {
         use flowgentra_ai::core::llm::Message;
 
         let user_prompt = state
@@ -676,12 +716,14 @@ impl Node<DynState> for LLMGraphNode {
         }
         messages.push(Message::user(&user_prompt));
 
-        let response = self.llm.chat(messages).await.map_err(|e| {
-            StateGraphError::ExecutionError {
-                node: self.name.clone(),
-                reason: format!("LLM call failed: {}", e),
-            }
-        })?;
+        let response =
+            self.llm
+                .chat(messages)
+                .await
+                .map_err(|e| StateGraphError::ExecutionError {
+                    node: self.name.clone(),
+                    reason: format!("LLM call failed: {}", e),
+                })?;
 
         let mut update = DynStateUpdate::new();
         update.insert(self.output_key.clone(), serde_json::json!(response.content));

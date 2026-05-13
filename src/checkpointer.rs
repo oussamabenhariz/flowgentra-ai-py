@@ -14,8 +14,8 @@
 //!     # FileCheckpointer persists to disk as JSON
 //!     fcp = FileCheckpointer("./checkpoints")
 
-use pyo3::prelude::*;
 use pyo3::exceptions::PyIOError;
+use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde_json::Value;
 
@@ -109,27 +109,42 @@ impl PyMemoryCheckpointer {
 
     /// Return the most recent snapshot for a thread, or `None` if empty.
     fn load_latest(&self, py: Python<'_>, thread_id: &str) -> PyResult<PyObject> {
-        let guard = self.storage.read()
+        let guard = self
+            .storage
+            .read()
             .map_err(|e| PyIOError::new_err(format!("lock poisoned: {}", e)))?;
         match guard.get(thread_id).and_then(|v| v.last()) {
-            Some(snap) => Ok(PyStateSnapshot { inner: snap.clone() }.into_py(py)),
+            Some(snap) => Ok(PyStateSnapshot {
+                inner: snap.clone(),
+            }
+            .into_py(py)),
             None => Ok(py.None()),
         }
     }
 
     /// Return the snapshot with the given `step_id`, or `None`.
     fn load(&self, py: Python<'_>, thread_id: &str, step_id: &str) -> PyResult<PyObject> {
-        let guard = self.storage.read()
+        let guard = self
+            .storage
+            .read()
             .map_err(|e| PyIOError::new_err(format!("lock poisoned: {}", e)))?;
-        match guard.get(thread_id).and_then(|v| v.iter().find(|s| s.step_id == step_id)) {
-            Some(snap) => Ok(PyStateSnapshot { inner: snap.clone() }.into_py(py)),
+        match guard
+            .get(thread_id)
+            .and_then(|v| v.iter().find(|s| s.step_id == step_id))
+        {
+            Some(snap) => Ok(PyStateSnapshot {
+                inner: snap.clone(),
+            }
+            .into_py(py)),
             None => Ok(py.None()),
         }
     }
 
     /// Return all snapshots for a thread (oldest first).
     fn list(&self, thread_id: &str) -> PyResult<Vec<PyStateSnapshot>> {
-        let guard = self.storage.read()
+        let guard = self
+            .storage
+            .read()
             .map_err(|e| PyIOError::new_err(format!("lock poisoned: {}", e)))?;
         Ok(guard
             .get(thread_id)
@@ -151,7 +166,9 @@ impl PyMemoryCheckpointer {
 
     /// Return a list of all thread IDs that have at least one snapshot.
     fn thread_ids(&self) -> PyResult<Vec<String>> {
-        Ok(self.storage.read()
+        Ok(self
+            .storage
+            .read()
             .map_err(|e| PyIOError::new_err(format!("lock poisoned: {}", e)))?
             .keys()
             .cloned()
@@ -160,7 +177,9 @@ impl PyMemoryCheckpointer {
 
     /// Return the number of snapshots stored for a thread.
     fn len(&self, thread_id: &str) -> PyResult<usize> {
-        Ok(self.storage.read()
+        Ok(self
+            .storage
+            .read()
             .map_err(|e| PyIOError::new_err(format!("lock poisoned: {}", e)))?
             .get(thread_id)
             .map(|v| v.len())
@@ -178,7 +197,9 @@ impl PyMemoryCheckpointer {
         patch: &Bound<'_, PyDict>,
     ) -> PyResult<()> {
         let updates = dict_to_map(patch)?;
-        let mut guard = self.storage.write()
+        let mut guard = self
+            .storage
+            .write()
             .map_err(|e| PyIOError::new_err(format!("lock poisoned: {}", e)))?;
 
         let snaps = guard
@@ -217,7 +238,10 @@ impl PyMemoryCheckpointer {
     }
 
     fn __repr__(&self) -> PyResult<String> {
-        let guard = self.storage.read().map_err(|e| PyIOError::new_err(e.to_string()))?;
+        let guard = self
+            .storage
+            .read()
+            .map_err(|e| PyIOError::new_err(e.to_string()))?;
         Ok(format!("MemoryCheckpointer(threads={})", guard.len()))
     }
 }
@@ -293,7 +317,10 @@ impl PyFileCheckpointer {
     fn list(&self, thread_id: &str) -> PyResult<Vec<PyStateSnapshot>> {
         let mut snaps = self.read_all(thread_id)?;
         snaps.sort_by_key(|s| s.created_at);
-        Ok(snaps.into_iter().map(|inner| PyStateSnapshot { inner }).collect())
+        Ok(snaps
+            .into_iter()
+            .map(|inner| PyStateSnapshot { inner })
+            .collect())
     }
 
     /// Delete all snapshot files for a thread.
@@ -358,9 +385,16 @@ impl PyFileCheckpointer {
     /// contain path-traversal sequences or other forbidden characters.
     fn validate_path_component(component: &str, label: &str) -> PyResult<()> {
         if component.is_empty() {
-            return Err(ValidationError::new_err(format!("{} must not be empty", label)));
+            return Err(ValidationError::new_err(format!(
+                "{} must not be empty",
+                label
+            )));
         }
-        if component.contains("..") || component.contains('/') || component.contains('\\') || component.contains('\0') {
+        if component.contains("..")
+            || component.contains('/')
+            || component.contains('\\')
+            || component.contains('\0')
+        {
             return Err(ValidationError::new_err(format!(
                 "{} '{}' contains invalid characters (path traversal is not allowed)",
                 label, component
@@ -376,7 +410,9 @@ impl PyFileCheckpointer {
 
     fn snap_path(&self, thread_id: &str, step_id: &str) -> PyResult<PathBuf> {
         Self::validate_path_component(step_id, "step_id")?;
-        Ok(self.thread_dir(thread_id)?.join(format!("{}.json", step_id)))
+        Ok(self
+            .thread_dir(thread_id)?
+            .join(format!("{}.json", step_id)))
     }
 
     fn write_snap(&self, thread_id: &str, snap: &StateSnapshot) -> PyResult<()> {
@@ -407,8 +443,9 @@ impl PyFileCheckpointer {
             if path.extension().and_then(|e| e.to_str()) == Some("json") {
                 let data = std::fs::read_to_string(&path)
                     .map_err(|e| PyIOError::new_err(format!("read error: {}", e)))?;
-                let snap: StateSnapshot = serde_json::from_str(&data)
-                    .map_err(|e| SerializationError::new_err(format!("JSON decode error: {}", e)))?;
+                let snap: StateSnapshot = serde_json::from_str(&data).map_err(|e| {
+                    SerializationError::new_err(format!("JSON decode error: {}", e))
+                })?;
                 snaps.push(snap);
             }
         }

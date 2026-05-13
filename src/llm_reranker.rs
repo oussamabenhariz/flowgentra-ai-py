@@ -12,9 +12,9 @@ type ScoreFn = Box<
     dyn Fn(
             String,
             String,
-        ) -> std::pin::Pin<
-            Box<dyn std::future::Future<Output = Result<f32, String>> + Send>,
-        > + Send
+        )
+            -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<f32, String>> + Send>>
+        + Send
         + Sync,
 >;
 
@@ -64,9 +64,7 @@ impl PyLLMReranker {
     /// Rerank search results using the LLM scoring function.
     fn rerank(&self, query: &str, results: Vec<PySearchResult>) -> PyResult<Vec<PySearchResult>> {
         let rs: Vec<SearchResult> = results.into_iter().map(|r| r.inner).collect();
-        let out = 
-            crate::run_async(self.inner.rerank(query, rs))
-            .map_err(to_py_err_generic)?;
+        let out = crate::run_async(self.inner.rerank(query, rs)).map_err(to_py_err_generic)?;
         Ok(out
             .into_iter()
             .map(|r| PySearchResult { inner: r })

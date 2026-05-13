@@ -22,27 +22,39 @@ pub struct PyVectorStoreType {
 impl PyVectorStoreType {
     #[staticmethod]
     fn pinecone() -> Self {
-        PyVectorStoreType { inner: VectorStoreType::Pinecone }
+        PyVectorStoreType {
+            inner: VectorStoreType::Pinecone,
+        }
     }
     #[staticmethod]
     fn weaviate() -> Self {
-        PyVectorStoreType { inner: VectorStoreType::Weaviate }
+        PyVectorStoreType {
+            inner: VectorStoreType::Weaviate,
+        }
     }
     #[staticmethod]
     fn chroma() -> Self {
-        PyVectorStoreType { inner: VectorStoreType::Chroma }
+        PyVectorStoreType {
+            inner: VectorStoreType::Chroma,
+        }
     }
     #[staticmethod]
     fn milvus() -> Self {
-        PyVectorStoreType { inner: VectorStoreType::Milvus }
+        PyVectorStoreType {
+            inner: VectorStoreType::Milvus,
+        }
     }
     #[staticmethod]
     fn qdrant() -> Self {
-        PyVectorStoreType { inner: VectorStoreType::Qdrant }
+        PyVectorStoreType {
+            inner: VectorStoreType::Qdrant,
+        }
     }
     #[staticmethod]
     fn memory() -> Self {
-        PyVectorStoreType { inner: VectorStoreType::Memory }
+        PyVectorStoreType {
+            inner: VectorStoreType::Memory,
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -103,8 +115,9 @@ impl PyRAGConfig {
     #[staticmethod]
     #[pyo3(signature = (endpoint, collection, embedding_dim=1536))]
     fn qdrant(endpoint: &str, collection: &str, embedding_dim: usize) -> PyResult<Self> {
-        let config = flowgentra_ai::core::rag::RAGConfig::qdrant(endpoint, collection, embedding_dim)
-            .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
+        let config =
+            flowgentra_ai::core::rag::RAGConfig::qdrant(endpoint, collection, embedding_dim)
+                .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
         Ok(PyRAGConfig { inner: config })
     }
 
@@ -120,14 +133,17 @@ impl PyRAGConfig {
     #[staticmethod]
     #[pyo3(signature = (endpoint, collection, embedding_dim=1536))]
     fn milvus(endpoint: &str, collection: &str, embedding_dim: usize) -> PyResult<Self> {
-        let config = flowgentra_ai::core::rag::RAGConfig::milvus(endpoint, collection, embedding_dim)
-            .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
+        let config =
+            flowgentra_ai::core::rag::RAGConfig::milvus(endpoint, collection, embedding_dim)
+                .map_err(|e| crate::error::ConfigurationError::new_err(format!("{}", e)))?;
         Ok(PyRAGConfig { inner: config })
     }
 
     #[getter]
     fn store_type(&self) -> PyVectorStoreType {
-        PyVectorStoreType { inner: self.inner.store_type.clone() }
+        PyVectorStoreType {
+            inner: self.inner.store_type.clone(),
+        }
     }
 
     #[getter]
@@ -191,7 +207,9 @@ impl PyVectorStoreConfig {
 
     #[getter]
     fn store_type(&self) -> PyVectorStoreType {
-        PyVectorStoreType { inner: self.inner.store_type.clone() }
+        PyVectorStoreType {
+            inner: self.inner.store_type.clone(),
+        }
     }
 
     #[getter]
@@ -216,7 +234,9 @@ impl PyVectorStoreConfig {
 
     /// Return a copy with all `${ENV_VAR}` tokens resolved from the environment.
     fn resolved(&self) -> Self {
-        PyVectorStoreConfig { inner: self.inner.resolved() }
+        PyVectorStoreConfig {
+            inner: self.inner.resolved(),
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -402,22 +422,30 @@ impl PyRAGGraphConfig {
 
     #[getter]
     fn vector_store(&self) -> PyVectorStoreConfig {
-        PyVectorStoreConfig { inner: self.inner.vector_store.clone() }
+        PyVectorStoreConfig {
+            inner: self.inner.vector_store.clone(),
+        }
     }
 
     #[getter]
     fn embeddings(&self) -> PyEmbeddingsConfig {
-        PyEmbeddingsConfig { inner: self.inner.embeddings.clone() }
+        PyEmbeddingsConfig {
+            inner: self.inner.embeddings.clone(),
+        }
     }
 
     #[getter]
     fn retrieval(&self) -> PyRetrievalSettings {
-        PyRetrievalSettings { inner: self.inner.retrieval.clone() }
+        PyRetrievalSettings {
+            inner: self.inner.retrieval.clone(),
+        }
     }
 
     #[getter]
     fn pdf(&self) -> PyPdfSettings {
-        PyPdfSettings { inner: self.inner.pdf.clone() }
+        PyPdfSettings {
+            inner: self.inner.pdf.clone(),
+        }
     }
 
     /// Get the resolved embedding dimension.

@@ -67,18 +67,18 @@ impl PyChromaStore {
             index_name: collection_name.to_string(),
             embedding_dim,
         };
-        let store =
-            crate::run_async(ChromaStore::new_with_tenant(&config, tenant, database))
-                .map_err(to_py_err_generic)?;
-        Ok(PyChromaStore { inner: Arc::new(store) })
+        let store = crate::run_async(ChromaStore::new_with_tenant(&config, tenant, database))
+            .map_err(to_py_err_generic)?;
+        Ok(PyChromaStore {
+            inner: Arc::new(store),
+        })
     }
 
     /// Index a document with its embedding.
     fn index(&self, doc: &PyDocument, embedding: Vec<f32>) -> PyResult<()> {
         let mut document = doc.inner.clone();
         document.embedding = Some(embedding);
-        crate::run_async(self.inner.index(document))
-            .map_err(to_py_err_generic)
+        crate::run_async(self.inner.index(document)).map_err(to_py_err_generic)
     }
 
     /// Search for similar documents by embedding vector.
@@ -99,14 +99,17 @@ impl PyChromaStore {
                     let val = py_to_json(&v)?;
                     exprs.push(FilterExpr::Eq(key, val));
                 }
-                Some(if exprs.len() == 1 { exprs.remove(0) } else { FilterExpr::And(exprs) })
+                Some(if exprs.len() == 1 {
+                    exprs.remove(0)
+                } else {
+                    FilterExpr::And(exprs)
+                })
             }
         } else {
             None
         };
 
-        let results = 
-            crate::run_async(self.inner.search(query_embedding, top_k, metadata_filter))
+        let results = crate::run_async(self.inner.search(query_embedding, top_k, metadata_filter))
             .map_err(to_py_err_generic)?;
 
         Ok(results
@@ -117,8 +120,7 @@ impl PyChromaStore {
 
     /// Delete a document by ID.
     fn delete(&self, doc_id: &str) -> PyResult<()> {
-        crate::run_async(self.inner.delete(doc_id))
-            .map_err(to_py_err_generic)
+        crate::run_async(self.inner.delete(doc_id)).map_err(to_py_err_generic)
     }
 
     /// Update a document.
@@ -126,15 +128,12 @@ impl PyChromaStore {
     fn update(&self, doc: &PyDocument, embedding: Option<Vec<f32>>) -> PyResult<()> {
         let mut document = doc.inner.clone();
         document.embedding = embedding;
-        crate::run_async(self.inner.update(document))
-            .map_err(to_py_err_generic)
+        crate::run_async(self.inner.update(document)).map_err(to_py_err_generic)
     }
 
     /// Get a document by ID.
     fn get(&self, doc_id: &str) -> PyResult<PyDocument> {
-        let doc = 
-            crate::run_async(self.inner.get(doc_id))
-            .map_err(to_py_err_generic)?;
+        let doc = crate::run_async(self.inner.get(doc_id)).map_err(to_py_err_generic)?;
         Ok(PyDocument { inner: doc })
     }
 
@@ -150,6 +149,9 @@ impl PyChromaStore {
     }
 
     fn __repr__(&self) -> String {
-        format!("ChromaStore(collection='{}', ...)", self.inner.collection_name())
+        format!(
+            "ChromaStore(collection='{}', ...)",
+            self.inner.collection_name()
+        )
     }
 }

@@ -25,7 +25,9 @@ macro_rules! impl_tool {
                     .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
                 json_to_py(py, &val)
             }
-            fn __repr__(&self) -> String { $repr.to_string() }
+            fn __repr__(&self) -> String {
+                $repr.to_string()
+            }
         }
     };
 }
@@ -41,7 +43,9 @@ pub struct PyWikipediaTool {
 impl PyWikipediaTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(WikipediaTool::new()) }
+        Self {
+            inner: Arc::new(WikipediaTool::new()),
+        }
     }
 }
 impl_tool!(PyWikipediaTool, "WikipediaTool()");
@@ -57,7 +61,9 @@ pub struct PyArxivTool {
 impl PyArxivTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(ArxivTool::new()) }
+        Self {
+            inner: Arc::new(ArxivTool::new()),
+        }
     }
 }
 impl_tool!(PyArxivTool, "ArxivTool()");
@@ -73,7 +79,9 @@ pub struct PyPubMedTool {
 impl PyPubMedTool {
     #[new]
     fn new() -> Self {
-        Self { inner: Arc::new(PubMedTool::new()) }
+        Self {
+            inner: Arc::new(PubMedTool::new()),
+        }
     }
 }
 impl_tool!(PyPubMedTool, "PubMedTool()");
@@ -94,7 +102,9 @@ impl PyWolframAlphaTool {
             Some(k) => WolframAlphaTool::new(k),
             None => WolframAlphaTool::from_env().map_err(to_py_err)?,
         };
-        Ok(Self { inner: Arc::new(tool) })
+        Ok(Self {
+            inner: Arc::new(tool),
+        })
     }
 }
 impl_tool!(PyWolframAlphaTool, "WolframAlphaTool()");

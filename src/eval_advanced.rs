@@ -4,9 +4,8 @@
 use pyo3::prelude::*;
 
 use flowgentra_ai::core::evaluation::{
-    ConfidenceConfig, ConfidenceLevel, ConfidenceScore, ConfidenceScorer, FallbackLevel,
-    NodeScore, NodeScorer, RetryConfig, RetryPolicy, RetryResult, ScoringCriteria,
-    SmartFallback,
+    ConfidenceConfig, ConfidenceLevel, ConfidenceScore, ConfidenceScorer, FallbackLevel, NodeScore,
+    NodeScorer, RetryConfig, RetryPolicy, RetryResult, ScoringCriteria, SmartFallback,
 };
 use flowgentra_ai::core::state::DynState;
 
@@ -24,23 +23,33 @@ pub struct PyConfidenceLevel {
 impl PyConfidenceLevel {
     #[staticmethod]
     fn very_low() -> Self {
-        PyConfidenceLevel { inner: ConfidenceLevel::VeryLow }
+        PyConfidenceLevel {
+            inner: ConfidenceLevel::VeryLow,
+        }
     }
     #[staticmethod]
     fn low() -> Self {
-        PyConfidenceLevel { inner: ConfidenceLevel::Low }
+        PyConfidenceLevel {
+            inner: ConfidenceLevel::Low,
+        }
     }
     #[staticmethod]
     fn medium() -> Self {
-        PyConfidenceLevel { inner: ConfidenceLevel::Medium }
+        PyConfidenceLevel {
+            inner: ConfidenceLevel::Medium,
+        }
     }
     #[staticmethod]
     fn high() -> Self {
-        PyConfidenceLevel { inner: ConfidenceLevel::High }
+        PyConfidenceLevel {
+            inner: ConfidenceLevel::High,
+        }
     }
     #[staticmethod]
     fn very_high() -> Self {
-        PyConfidenceLevel { inner: ConfidenceLevel::VeryHigh }
+        PyConfidenceLevel {
+            inner: ConfidenceLevel::VeryHigh,
+        }
     }
 
     fn __eq__(&self, other: &PyConfidenceLevel) -> bool {
@@ -106,19 +115,31 @@ impl PyConfidenceConfig {
 
     #[staticmethod]
     fn defaults() -> Self {
-        PyConfidenceConfig { inner: ConfidenceConfig::default() }
+        PyConfidenceConfig {
+            inner: ConfidenceConfig::default(),
+        }
     }
 
     #[getter]
-    fn get_clarity_weight(&self) -> f64 { self.inner.clarity_weight }
+    fn get_clarity_weight(&self) -> f64 {
+        self.inner.clarity_weight
+    }
     #[getter]
-    fn get_relevance_weight(&self) -> f64 { self.inner.relevance_weight }
+    fn get_relevance_weight(&self) -> f64 {
+        self.inner.relevance_weight
+    }
     #[getter]
-    fn get_completeness_weight(&self) -> f64 { self.inner.completeness_weight }
+    fn get_completeness_weight(&self) -> f64 {
+        self.inner.completeness_weight
+    }
     #[getter]
-    fn get_low_threshold(&self) -> f64 { self.inner.low_threshold }
+    fn get_low_threshold(&self) -> f64 {
+        self.inner.low_threshold
+    }
     #[getter]
-    fn get_high_threshold(&self) -> f64 { self.inner.high_threshold }
+    fn get_high_threshold(&self) -> f64 {
+        self.inner.high_threshold
+    }
 
     fn __repr__(&self) -> String {
         format!(
@@ -143,26 +164,44 @@ pub struct PyConfidenceScore {
 #[pymethods]
 impl PyConfidenceScore {
     #[getter]
-    fn get_overall(&self) -> f64 { self.inner.overall }
-    #[getter]
-    fn get_clarity(&self) -> f64 { self.inner.clarity }
-    #[getter]
-    fn get_relevance(&self) -> f64 { self.inner.relevance }
-    #[getter]
-    fn get_completeness(&self) -> f64 { self.inner.completeness }
-    #[getter]
-    fn get_level(&self) -> PyConfidenceLevel {
-        PyConfidenceLevel { inner: self.inner.level.clone() }
+    fn get_overall(&self) -> f64 {
+        self.inner.overall
     }
     #[getter]
-    fn get_indicators(&self) -> Vec<String> { self.inner.indicators.clone() }
+    fn get_clarity(&self) -> f64 {
+        self.inner.clarity
+    }
+    #[getter]
+    fn get_relevance(&self) -> f64 {
+        self.inner.relevance
+    }
+    #[getter]
+    fn get_completeness(&self) -> f64 {
+        self.inner.completeness
+    }
+    #[getter]
+    fn get_level(&self) -> PyConfidenceLevel {
+        PyConfidenceLevel {
+            inner: self.inner.level.clone(),
+        }
+    }
+    #[getter]
+    fn get_indicators(&self) -> Vec<String> {
+        self.inner.indicators.clone()
+    }
 
     fn is_high_confidence(&self) -> bool {
-        matches!(self.inner.level, ConfidenceLevel::High | ConfidenceLevel::VeryHigh)
+        matches!(
+            self.inner.level,
+            ConfidenceLevel::High | ConfidenceLevel::VeryHigh
+        )
     }
 
     fn is_low_confidence(&self) -> bool {
-        matches!(self.inner.level, ConfidenceLevel::VeryLow | ConfidenceLevel::Low)
+        matches!(
+            self.inner.level,
+            ConfidenceLevel::VeryLow | ConfidenceLevel::Low
+        )
     }
 
     fn passes(&self, threshold: f64) -> bool {
@@ -173,7 +212,10 @@ impl PyConfidenceScore {
         format!(
             "ConfidenceScore(overall={:.3}, level={})",
             self.inner.overall,
-            PyConfidenceLevel { inner: self.inner.level.clone() }.__str__(),
+            PyConfidenceLevel {
+                inner: self.inner.level.clone()
+            }
+            .__str__(),
         )
     }
 }
@@ -249,21 +291,35 @@ impl PyScoringCriteria {
 
     #[staticmethod]
     fn defaults() -> Self {
-        PyScoringCriteria { inner: ScoringCriteria::default() }
+        PyScoringCriteria {
+            inner: ScoringCriteria::default(),
+        }
     }
 
     #[getter]
-    fn get_check_empty(&self) -> bool { self.inner.check_empty }
+    fn get_check_empty(&self) -> bool {
+        self.inner.check_empty
+    }
     #[getter]
-    fn get_check_validity(&self) -> bool { self.inner.check_validity }
+    fn get_check_validity(&self) -> bool {
+        self.inner.check_validity
+    }
     #[getter]
-    fn get_check_usefulness(&self) -> bool { self.inner.check_usefulness }
+    fn get_check_usefulness(&self) -> bool {
+        self.inner.check_usefulness
+    }
     #[getter]
-    fn get_check_consistency(&self) -> bool { self.inner.check_consistency }
+    fn get_check_consistency(&self) -> bool {
+        self.inner.check_consistency
+    }
     #[getter]
-    fn get_min_length(&self) -> usize { self.inner.min_length }
+    fn get_min_length(&self) -> usize {
+        self.inner.min_length
+    }
     #[getter]
-    fn get_max_length(&self) -> usize { self.inner.max_length }
+    fn get_max_length(&self) -> usize {
+        self.inner.max_length
+    }
 
     fn __repr__(&self) -> String {
         format!(
@@ -287,17 +343,29 @@ pub struct PyNodeScore {
 #[pymethods]
 impl PyNodeScore {
     #[getter]
-    fn get_overall(&self) -> f64 { self.inner.overall }
+    fn get_overall(&self) -> f64 {
+        self.inner.overall
+    }
     #[getter]
-    fn get_completeness(&self) -> f64 { self.inner.completeness }
+    fn get_completeness(&self) -> f64 {
+        self.inner.completeness
+    }
     #[getter]
-    fn get_validity(&self) -> f64 { self.inner.validity }
+    fn get_validity(&self) -> f64 {
+        self.inner.validity
+    }
     #[getter]
-    fn get_usefulness(&self) -> f64 { self.inner.usefulness }
+    fn get_usefulness(&self) -> f64 {
+        self.inner.usefulness
+    }
     #[getter]
-    fn get_consistency(&self) -> f64 { self.inner.consistency }
+    fn get_consistency(&self) -> f64 {
+        self.inner.consistency
+    }
     #[getter]
-    fn get_explanation(&self) -> String { self.inner.explanation.clone() }
+    fn get_explanation(&self) -> String {
+        self.inner.explanation.clone()
+    }
 
     fn passes(&self, threshold: f64) -> bool {
         self.inner.overall >= threshold
@@ -306,10 +374,7 @@ impl PyNodeScore {
     fn __repr__(&self) -> String {
         format!(
             "NodeScore(overall={:.3}, completeness={:.3}, validity={:.3}, usefulness={:.3})",
-            self.inner.overall,
-            self.inner.completeness,
-            self.inner.validity,
-            self.inner.usefulness,
+            self.inner.overall, self.inner.completeness, self.inner.validity, self.inner.usefulness,
         )
     }
 }
@@ -353,6 +418,7 @@ pub struct PyRetryConfig {
 #[pymethods]
 impl PyRetryConfig {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
         max_retries = 3,
         initial_delay_ms = 100,
@@ -392,27 +458,47 @@ impl PyRetryConfig {
 
     #[staticmethod]
     fn defaults() -> Self {
-        PyRetryConfig { inner: RetryConfig::default() }
+        PyRetryConfig {
+            inner: RetryConfig::default(),
+        }
     }
 
     #[getter]
-    fn get_max_retries(&self) -> u32 { self.inner.max_retries }
+    fn get_max_retries(&self) -> u32 {
+        self.inner.max_retries
+    }
     #[getter]
-    fn get_initial_delay_ms(&self) -> u64 { self.inner.initial_delay_ms }
+    fn get_initial_delay_ms(&self) -> u64 {
+        self.inner.initial_delay_ms
+    }
     #[getter]
-    fn get_backoff_multiplier(&self) -> f64 { self.inner.backoff_multiplier }
+    fn get_backoff_multiplier(&self) -> f64 {
+        self.inner.backoff_multiplier
+    }
     #[getter]
-    fn get_max_delay_ms(&self) -> u64 { self.inner.max_delay_ms }
+    fn get_max_delay_ms(&self) -> u64 {
+        self.inner.max_delay_ms
+    }
     #[getter]
-    fn get_confidence_threshold(&self) -> f64 { self.inner.confidence_threshold }
+    fn get_confidence_threshold(&self) -> f64 {
+        self.inner.confidence_threshold
+    }
     #[getter]
-    fn get_include_feedback(&self) -> bool { self.inner.include_feedback }
+    fn get_include_feedback(&self) -> bool {
+        self.inner.include_feedback
+    }
     #[getter]
-    fn get_increase_temperature(&self) -> bool { self.inner.increase_temperature }
+    fn get_increase_temperature(&self) -> bool {
+        self.inner.increase_temperature
+    }
     #[getter]
-    fn get_enable_circuit_breaker(&self) -> bool { self.inner.enable_circuit_breaker }
+    fn get_enable_circuit_breaker(&self) -> bool {
+        self.inner.enable_circuit_breaker
+    }
     #[getter]
-    fn get_circuit_breaker_threshold(&self) -> u32 { self.inner.circuit_breaker_threshold }
+    fn get_circuit_breaker_threshold(&self) -> u32 {
+        self.inner.circuit_breaker_threshold
+    }
 
     fn __repr__(&self) -> String {
         format!(
@@ -434,7 +520,9 @@ pub struct PyRetryResult {
 impl PyRetryResult {
     #[staticmethod]
     fn no_retry() -> Self {
-        PyRetryResult { inner: RetryResult::new_no_retry() }
+        PyRetryResult {
+            inner: RetryResult::new_no_retry(),
+        }
     }
 
     #[staticmethod]
@@ -450,17 +538,29 @@ impl PyRetryResult {
     }
 
     #[getter]
-    fn get_was_retried(&self) -> bool { self.inner.was_retried }
+    fn get_was_retried(&self) -> bool {
+        self.inner.was_retried
+    }
     #[getter]
-    fn get_retry_count(&self) -> u32 { self.inner.retry_count }
+    fn get_retry_count(&self) -> u32 {
+        self.inner.retry_count
+    }
     #[getter]
-    fn get_confidence_history(&self) -> Vec<f64> { self.inner.confidence_history.clone() }
+    fn get_confidence_history(&self) -> Vec<f64> {
+        self.inner.confidence_history.clone()
+    }
     #[getter]
-    fn get_success(&self) -> bool { self.inner.success }
+    fn get_success(&self) -> bool {
+        self.inner.success
+    }
     #[getter]
-    fn get_improvement(&self) -> f64 { self.inner.improvement }
+    fn get_improvement(&self) -> f64 {
+        self.inner.improvement
+    }
     #[getter]
-    fn get_stop_reason(&self) -> String { self.inner.stop_reason.clone() }
+    fn get_stop_reason(&self) -> String {
+        self.inner.stop_reason.clone()
+    }
 
     fn generate_report(&self) -> String {
         RetryPolicy::generate_report(&self.inner)
@@ -499,11 +599,7 @@ pub fn py_retry_temperature(retry_count: u32) -> f64 {
 
 /// Build a retry feedback prompt to inject into the next LLM call.
 #[pyfunction]
-pub fn py_retry_feedback(
-    feedback: &str,
-    issues: Vec<String>,
-    suggestions: Vec<String>,
-) -> String {
+pub fn py_retry_feedback(feedback: &str, issues: Vec<String>, suggestions: Vec<String>) -> String {
     RetryPolicy::build_retry_feedback(feedback, &issues, &suggestions)
 }
 
@@ -531,25 +627,35 @@ pub struct PyFallbackLevel {
 impl PyFallbackLevel {
     #[staticmethod]
     fn initial() -> Self {
-        PyFallbackLevel { inner: FallbackLevel::Initial }
+        PyFallbackLevel {
+            inner: FallbackLevel::Initial,
+        }
     }
     #[staticmethod]
     fn degraded() -> Self {
-        PyFallbackLevel { inner: FallbackLevel::Degraded }
+        PyFallbackLevel {
+            inner: FallbackLevel::Degraded,
+        }
     }
     #[staticmethod]
     fn minimal() -> Self {
-        PyFallbackLevel { inner: FallbackLevel::Minimal }
+        PyFallbackLevel {
+            inner: FallbackLevel::Minimal,
+        }
     }
     #[staticmethod]
     fn template() -> Self {
-        PyFallbackLevel { inner: FallbackLevel::Template }
+        PyFallbackLevel {
+            inner: FallbackLevel::Template,
+        }
     }
 
     /// Get the fallback level for a given number of retries (0→Initial, 1→Degraded, …).
     #[staticmethod]
     fn from_retries(retries: u32) -> Self {
-        PyFallbackLevel { inner: FallbackLevel::from_retries(retries) }
+        PyFallbackLevel {
+            inner: FallbackLevel::from_retries(retries),
+        }
     }
 
     fn __repr__(&self) -> String {

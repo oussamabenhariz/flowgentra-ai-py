@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Channel types — the backbone of LangGraph-style state management.
 //!
 //! Each state field maps to a Channel, which holds the current value and

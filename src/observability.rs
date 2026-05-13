@@ -5,9 +5,9 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use std::sync::Arc;
 
-use flowgentra_ai::core::observability::ExecutionTrace;
-use flowgentra_ai::core::observability::visualization::ExecutionTracer;
 use flowgentra_ai::core::observability::events::{EventBroadcaster, ExecutionEvent};
+use flowgentra_ai::core::observability::visualization::ExecutionTracer;
+use flowgentra_ai::core::observability::ExecutionTrace;
 use flowgentra_ai::core::observability::ReplayMode;
 use flowgentra_ai::core::utils::tracing::init_tracing;
 
@@ -170,7 +170,12 @@ fn execution_event_to_dict(py: Python<'_>, event: &ExecutionEvent) -> PyResult<P
             d.set_item("node_name", node_name)?;
             d.set_item("step", step)?;
         }
-        ExecutionEvent::NodeCompleted { node_name, step, duration_ms, state_snapshot } => {
+        ExecutionEvent::NodeCompleted {
+            node_name,
+            step,
+            duration_ms,
+            state_snapshot,
+        } => {
             d.set_item("type", "node_completed")?;
             d.set_item("node_name", node_name)?;
             d.set_item("step", step)?;
@@ -180,13 +185,21 @@ fn execution_event_to_dict(py: Python<'_>, event: &ExecutionEvent) -> PyResult<P
                 None => d.set_item("state_snapshot", py.None())?,
             }
         }
-        ExecutionEvent::NodeFailed { node_name, step, error } => {
+        ExecutionEvent::NodeFailed {
+            node_name,
+            step,
+            error,
+        } => {
             d.set_item("type", "node_failed")?;
             d.set_item("node_name", node_name)?;
             d.set_item("step", step)?;
             d.set_item("error", error)?;
         }
-        ExecutionEvent::EdgeTraversed { from, to, condition } => {
+        ExecutionEvent::EdgeTraversed {
+            from,
+            to,
+            condition,
+        } => {
             d.set_item("type", "edge_traversed")?;
             d.set_item("from", from)?;
             d.set_item("to", to)?;
@@ -195,7 +208,10 @@ fn execution_event_to_dict(py: Python<'_>, event: &ExecutionEvent) -> PyResult<P
                 None => d.set_item("condition", py.None())?,
             }
         }
-        ExecutionEvent::GraphCompleted { total_steps, total_duration_ms } => {
+        ExecutionEvent::GraphCompleted {
+            total_steps,
+            total_duration_ms,
+        } => {
             d.set_item("type", "graph_completed")?;
             d.set_item("total_steps", total_steps)?;
             d.set_item("total_duration_ms", total_duration_ms)?;
@@ -208,24 +224,40 @@ fn execution_event_to_dict(py: Python<'_>, event: &ExecutionEvent) -> PyResult<P
                 None => d.set_item("last_node", py.None())?,
             }
         }
-        ExecutionEvent::LLMStreaming { node_name, chunk, chunk_index } => {
+        ExecutionEvent::LLMStreaming {
+            node_name,
+            chunk,
+            chunk_index,
+        } => {
             d.set_item("type", "llm_streaming")?;
             d.set_item("node_name", node_name)?;
             d.set_item("chunk", chunk)?;
             d.set_item("chunk_index", chunk_index)?;
         }
-        ExecutionEvent::LLMStreamingCompleted { node_name, total_chunks } => {
+        ExecutionEvent::LLMStreamingCompleted {
+            node_name,
+            total_chunks,
+        } => {
             d.set_item("type", "llm_streaming_completed")?;
             d.set_item("node_name", node_name)?;
             d.set_item("total_chunks", total_chunks)?;
         }
-        ExecutionEvent::ToolCalled { node_name, tool_name, args } => {
+        ExecutionEvent::ToolCalled {
+            node_name,
+            tool_name,
+            args,
+        } => {
             d.set_item("type", "tool_called")?;
             d.set_item("node_name", node_name)?;
             d.set_item("tool_name", tool_name)?;
             d.set_item("args", crate::json_to_py(py, args)?)?;
         }
-        ExecutionEvent::ToolResult { node_name, tool_name, result, success } => {
+        ExecutionEvent::ToolResult {
+            node_name,
+            tool_name,
+            result,
+            success,
+        } => {
             d.set_item("type", "tool_result")?;
             d.set_item("node_name", node_name)?;
             d.set_item("tool_name", tool_name)?;
@@ -283,7 +315,9 @@ impl PyEventBroadcaster {
 
     /// Manually emit a GraphStarted event.
     fn emit_graph_started(&self, graph_id: &str) {
-        self.inner.emit(ExecutionEvent::GraphStarted { graph_id: graph_id.to_string() });
+        self.inner.emit(ExecutionEvent::GraphStarted {
+            graph_id: graph_id.to_string(),
+        });
     }
 
     /// Manually emit a NodeStarted event.
@@ -293,7 +327,8 @@ impl PyEventBroadcaster {
 
     /// Manually emit a NodeCompleted event.
     fn emit_node_completed(&self, node_name: &str, step: usize, duration_ms: u64) {
-        self.inner.node_completed(node_name, step, duration_ms, None);
+        self.inner
+            .node_completed(node_name, step, duration_ms, None);
     }
 
     /// Manually emit a NodeFailed event.
@@ -302,7 +337,10 @@ impl PyEventBroadcaster {
     }
 
     fn __repr__(&self) -> String {
-        format!("EventBroadcaster(subscribers={})", self.inner.subscriber_count())
+        format!(
+            "EventBroadcaster(subscribers={})",
+            self.inner.subscriber_count()
+        )
     }
 }
 
@@ -345,14 +383,9 @@ impl PyEventReceiver {
             crate::error::InternalError::new_err("EventReceiver has been consumed")
         })?;
         let list = pyo3::types::PyList::empty_bound(py);
-        loop {
-            match rx.try_recv() {
-                Ok(event) => {
-                    let d = execution_event_to_dict(py, &event)?;
-                    list.append(d)?;
-                }
-                Err(_) => break,
-            }
+        while let Ok(event) = rx.try_recv() {
+            let d = execution_event_to_dict(py, &event)?;
+            list.append(d)?;
         }
         Ok(list.into())
     }

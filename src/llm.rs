@@ -4,9 +4,8 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 
 use flowgentra_ai::core::llm::{
-    create_llm, LLM, LLMConfig, LLMProvider, Message, MessageRole, ToolDefinition, ToolCall,
-    TokenUsage, ResponseFormat, model_pricing,
-    CachedLLM, FallbackLLM, RetryLLM,
+    create_llm, model_pricing, CachedLLM, FallbackLLM, LLMConfig, LLMProvider, Message,
+    MessageRole, ResponseFormat, RetryLLM, TokenUsage, ToolCall, ToolDefinition, LLM,
 };
 
 use crate::error::to_py_err;
@@ -23,11 +22,17 @@ pub struct PyTokenUsage {
 #[pymethods]
 impl PyTokenUsage {
     #[getter]
-    fn get_prompt_tokens(&self) -> u64 { self.inner.prompt_tokens }
+    fn get_prompt_tokens(&self) -> u64 {
+        self.inner.prompt_tokens
+    }
     #[getter]
-    fn get_completion_tokens(&self) -> u64 { self.inner.completion_tokens }
+    fn get_completion_tokens(&self) -> u64 {
+        self.inner.completion_tokens
+    }
     #[getter]
-    fn get_total_tokens(&self) -> u64 { self.inner.total_tokens }
+    fn get_total_tokens(&self) -> u64 {
+        self.inner.total_tokens
+    }
 
     fn estimated_cost(&self, model: &str) -> Option<f64> {
         self.inner.estimated_cost(model)
@@ -52,16 +57,23 @@ pub struct PyToolCall {
 #[pymethods]
 impl PyToolCall {
     #[getter]
-    fn get_id(&self) -> String { self.inner.id.clone() }
+    fn get_id(&self) -> String {
+        self.inner.id.clone()
+    }
     #[getter]
-    fn get_name(&self) -> String { self.inner.name.clone() }
+    fn get_name(&self) -> String {
+        self.inner.name.clone()
+    }
     #[getter]
     fn get_arguments(&self, py: Python<'_>) -> PyResult<PyObject> {
         json_to_py(py, &self.inner.arguments)
     }
 
     fn __repr__(&self) -> String {
-        format!("ToolCall(id='{}', name='{}')", self.inner.id, self.inner.name)
+        format!(
+            "ToolCall(id='{}', name='{}')",
+            self.inner.id, self.inner.name
+        )
     }
 }
 
@@ -84,9 +96,13 @@ impl PyToolDefinition {
     }
 
     #[getter]
-    fn get_name(&self) -> String { self.inner.name.clone() }
+    fn get_name(&self) -> String {
+        self.inner.name.clone()
+    }
     #[getter]
-    fn get_description(&self) -> String { self.inner.description.clone() }
+    fn get_description(&self) -> String {
+        self.inner.description.clone()
+    }
     #[getter]
     fn get_parameters(&self, py: Python<'_>) -> PyResult<PyObject> {
         json_to_py(py, &self.inner.parameters)
@@ -109,23 +125,33 @@ pub struct PyMessage {
 impl PyMessage {
     #[staticmethod]
     fn user(content: String) -> Self {
-        PyMessage { inner: Message::user(content) }
+        PyMessage {
+            inner: Message::user(content),
+        }
     }
     #[staticmethod]
     fn system(content: String) -> Self {
-        PyMessage { inner: Message::system(content) }
+        PyMessage {
+            inner: Message::system(content),
+        }
     }
     #[staticmethod]
     fn assistant(content: String) -> Self {
-        PyMessage { inner: Message::assistant(content) }
+        PyMessage {
+            inner: Message::assistant(content),
+        }
     }
     #[staticmethod]
     fn tool(content: String) -> Self {
-        PyMessage { inner: Message::tool(content) }
+        PyMessage {
+            inner: Message::tool(content),
+        }
     }
     #[staticmethod]
     fn tool_result(tool_call_id: String, content: String) -> Self {
-        PyMessage { inner: Message::tool_result(tool_call_id, content) }
+        PyMessage {
+            inner: Message::tool_result(tool_call_id, content),
+        }
     }
 
     #[getter]
@@ -138,7 +164,9 @@ impl PyMessage {
         }
     }
     #[getter]
-    fn get_content(&self) -> String { self.inner.content.clone() }
+    fn get_content(&self) -> String {
+        self.inner.content.clone()
+    }
     #[getter]
     fn get_tool_calls(&self, py: Python<'_>) -> PyResult<PyObject> {
         match &self.inner.tool_calls {
@@ -154,10 +182,16 @@ impl PyMessage {
         }
     }
     #[getter]
-    fn get_tool_call_id(&self) -> Option<String> { self.inner.tool_call_id.clone() }
+    fn get_tool_call_id(&self) -> Option<String> {
+        self.inner.tool_call_id.clone()
+    }
 
     fn __repr__(&self) -> String {
-        format!("Message(role='{}', content='{}')", self.get_role(), &self.inner.content)
+        format!(
+            "Message(role='{}', content='{}')",
+            self.get_role(),
+            &self.inner.content
+        )
     }
 }
 
@@ -172,14 +206,25 @@ pub struct PyResponseFormat {
 #[pymethods]
 impl PyResponseFormat {
     #[staticmethod]
-    fn text() -> Self { PyResponseFormat { inner: ResponseFormat::Text } }
+    fn text() -> Self {
+        PyResponseFormat {
+            inner: ResponseFormat::Text,
+        }
+    }
     #[staticmethod]
-    fn json() -> Self { PyResponseFormat { inner: ResponseFormat::Json } }
+    fn json() -> Self {
+        PyResponseFormat {
+            inner: ResponseFormat::Json,
+        }
+    }
     #[staticmethod]
     fn json_schema(name: String, schema: &Bound<'_, PyAny>) -> PyResult<Self> {
         let schema_val = py_to_json(schema)?;
         Ok(PyResponseFormat {
-            inner: ResponseFormat::JsonSchema { name, schema: schema_val },
+            inner: ResponseFormat::JsonSchema {
+                name,
+                schema: schema_val,
+            },
         })
     }
 
@@ -187,7 +232,9 @@ impl PyResponseFormat {
         match &self.inner {
             ResponseFormat::Text => "ResponseFormat.text()".to_string(),
             ResponseFormat::Json => "ResponseFormat.json()".to_string(),
-            ResponseFormat::JsonSchema { name, .. } => format!("ResponseFormat.json_schema(name='{}')", name),
+            ResponseFormat::JsonSchema { name, .. } => {
+                format!("ResponseFormat.json_schema(name='{}')", name)
+            }
         }
     }
 }
@@ -230,11 +277,17 @@ impl PyLLMConfig {
     }
 
     #[getter]
-    fn get_model(&self) -> String { self.inner.model.clone() }
+    fn get_model(&self) -> String {
+        self.inner.model.clone()
+    }
     #[getter]
-    fn get_temperature(&self) -> Option<f32> { self.inner.temperature }
+    fn get_temperature(&self) -> Option<f32> {
+        self.inner.temperature
+    }
     #[getter]
-    fn get_max_tokens(&self) -> Option<usize> { self.inner.max_tokens }
+    fn get_max_tokens(&self) -> Option<usize> {
+        self.inner.max_tokens
+    }
 
     fn with_response_format(&self, fmt: &PyResponseFormat) -> Self {
         PyLLMConfig {
@@ -395,14 +448,11 @@ impl PyLLM {
         messages: Vec<PyMessage>,
     ) -> PyResult<(PyMessage, PyObject)> {
         let msgs: Vec<Message> = messages.into_iter().map(|m| m.inner).collect();
-        
+
         let (msg, usage) = crate::run_async(self.inner.chat_with_usage(msgs)).map_err(to_py_err)?;
-        
+
         let py_usage = match usage {
-            Some(u) => PyTokenUsage {
-                inner: u,
-            }
-            .into_py(py),
+            Some(u) => PyTokenUsage { inner: u }.into_py(py),
             None => py.None(),
         };
         Ok((PyMessage { inner: msg }, py_usage))
@@ -423,9 +473,10 @@ impl PyLLM {
     ) -> PyResult<PyMessage> {
         let msgs: Vec<Message> = messages.into_iter().map(|m| m.inner).collect();
         let tool_defs: Vec<ToolDefinition> = tools.into_iter().map(|t| t.inner).collect();
-        
-        let result = crate::run_async(self.inner.chat_with_tools(msgs, &tool_defs)).map_err(to_py_err)?;
-        
+
+        let result =
+            crate::run_async(self.inner.chat_with_tools(msgs, &tool_defs)).map_err(to_py_err)?;
+
         Ok(PyMessage { inner: result })
     }
 
@@ -468,8 +519,7 @@ impl PyLLM {
     /// Example:
     ///     robust = primary.with_fallback(secondary)
     fn with_fallback(&self, fallback: &PyLLM) -> Self {
-        let fb = FallbackLLM::new(self.inner.clone())
-            .with_fallback(fallback.inner.clone());
+        let fb = FallbackLLM::new(self.inner.clone()).with_fallback(fallback.inner.clone());
         PyLLM {
             inner: Arc::new(fb),
         }

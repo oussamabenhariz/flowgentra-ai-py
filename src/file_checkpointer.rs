@@ -4,11 +4,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use flowgentra_ai::core::state::DynState;
-use flowgentra_ai::core::state_graph::{FileCheckpointer, Checkpointer, Checkpoint};
+use flowgentra_ai::core::state_graph::{Checkpoint, Checkpointer, FileCheckpointer};
 
 use crate::error::to_py_err_generic;
-use crate::json_to_py;
 use crate::graph::pydict_to_dynstate;
+use crate::json_to_py;
 
 // ─── PyFileCheckpointer ────────────────────────────────────────────────────
 
@@ -62,8 +62,7 @@ impl PyFileCheckpointer {
 
     /// Load a specific checkpoint by thread ID and step.
     fn load(&self, thread_id: &str, step: usize) -> PyResult<Option<PyObject>> {
-        let result = 
-            crate::run_async(Checkpointer::<DynState>::load(&self.inner, thread_id, step))
+        let result = crate::run_async(Checkpointer::<DynState>::load(&self.inner, thread_id, step))
             .map_err(to_py_err_generic)?;
         match result {
             Some(cp) => Python::with_gil(|py| {
@@ -82,9 +81,11 @@ impl PyFileCheckpointer {
 
     /// Load the latest checkpoint for a thread.
     fn load_latest(&self, thread_id: &str) -> PyResult<Option<PyObject>> {
-        let result = 
-            crate::run_async(Checkpointer::<DynState>::load_latest(&self.inner, thread_id))
-            .map_err(to_py_err_generic)?;
+        let result = crate::run_async(Checkpointer::<DynState>::load_latest(
+            &self.inner,
+            thread_id,
+        ))
+        .map_err(to_py_err_generic)?;
         match result {
             Some(cp) => Python::with_gil(|py| {
                 let dict = pyo3::types::PyDict::new_bound(py);
@@ -102,20 +103,30 @@ impl PyFileCheckpointer {
 
     /// List all checkpoints for a thread as [(step, timestamp), ...].
     fn list_checkpoints(&self, thread_id: &str) -> PyResult<Vec<(usize, i64)>> {
-        crate::run_async(Checkpointer::<DynState>::list_checkpoints(&self.inner, thread_id))
-            .map_err(to_py_err_generic)
+        crate::run_async(Checkpointer::<DynState>::list_checkpoints(
+            &self.inner,
+            thread_id,
+        ))
+        .map_err(to_py_err_generic)
     }
 
     /// Delete a specific checkpoint.
     fn delete(&self, thread_id: &str, step: usize) -> PyResult<()> {
-        crate::run_async(Checkpointer::<DynState>::delete(&self.inner, thread_id, step))
-            .map_err(to_py_err_generic)
+        crate::run_async(Checkpointer::<DynState>::delete(
+            &self.inner,
+            thread_id,
+            step,
+        ))
+        .map_err(to_py_err_generic)
     }
 
     /// Delete all checkpoints for a thread.
     fn delete_thread(&self, thread_id: &str) -> PyResult<()> {
-        crate::run_async(Checkpointer::<DynState>::delete_thread(&self.inner, thread_id))
-            .map_err(to_py_err_generic)
+        crate::run_async(Checkpointer::<DynState>::delete_thread(
+            &self.inner,
+            thread_id,
+        ))
+        .map_err(to_py_err_generic)
     }
 
     fn __repr__(&self) -> String {

@@ -7,11 +7,11 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use flowgentra_ai::core::node::nodes_trait::{NodeOutput, PluggableNode};
 use flowgentra_ai::core::node::orchestrator_node::{
     ChildExecutionStats, OrchestrationStrategy, ParallelAggregation, ParallelMergeStrategy,
     SupervisorNode, SupervisorNodeConfig,
 };
-use flowgentra_ai::core::node::nodes_trait::{NodeOutput, PluggableNode};
 use flowgentra_ai::core::state::DynState;
 use flowgentra_ai::core::state_graph::StateGraph;
 
@@ -29,7 +29,10 @@ struct StateGraphAsPluggable {
 
 #[async_trait::async_trait]
 impl PluggableNode<DynState> for StateGraphAsPluggable {
-    async fn run(&self, state: DynState) -> flowgentra_ai::core::error::Result<NodeOutput<DynState>> {
+    async fn run(
+        &self,
+        state: DynState,
+    ) -> flowgentra_ai::core::error::Result<NodeOutput<DynState>> {
         let start = std::time::Instant::now();
         match self.graph.invoke(state.clone()).await {
             Ok(result_state) => Ok(NodeOutput {
@@ -59,7 +62,8 @@ impl PluggableNode<DynState> for StateGraphAsPluggable {
 
     fn config(&self) -> &HashMap<String, serde_json::Value> {
         // Return empty config — the graph is opaque
-        static EMPTY: std::sync::OnceLock<HashMap<String, serde_json::Value>> = std::sync::OnceLock::new();
+        static EMPTY: std::sync::OnceLock<HashMap<String, serde_json::Value>> =
+            std::sync::OnceLock::new();
         EMPTY.get_or_init(HashMap::new)
     }
 
@@ -79,11 +83,16 @@ struct PyCallableAsPluggable {
 
 #[async_trait::async_trait]
 impl PluggableNode<DynState> for PyCallableAsPluggable {
-    async fn run(&self, state: DynState) -> flowgentra_ai::core::error::Result<NodeOutput<DynState>> {
+    async fn run(
+        &self,
+        state: DynState,
+    ) -> flowgentra_ai::core::error::Result<NodeOutput<DynState>> {
         let start = std::time::Instant::now();
         let result = Python::with_gil(|py| -> PyResult<DynState> {
             let func = self.func.clone_ref(py);
-            let py_state = PyState { inner: state.clone() };
+            let py_state = PyState {
+                inner: state.clone(),
+            };
             let py_result = func.call1(py, (py_state,))?;
             let result_state: PyState = py_result.extract(py)?;
             Ok(result_state.inner)
@@ -116,7 +125,8 @@ impl PluggableNode<DynState> for PyCallableAsPluggable {
     }
 
     fn config(&self) -> &HashMap<String, serde_json::Value> {
-        static EMPTY: std::sync::OnceLock<HashMap<String, serde_json::Value>> = std::sync::OnceLock::new();
+        static EMPTY: std::sync::OnceLock<HashMap<String, serde_json::Value>> =
+            std::sync::OnceLock::new();
         EMPTY.get_or_init(HashMap::new)
     }
 
@@ -156,68 +166,95 @@ pub struct PyOrchestrationStrategy {
 impl PyOrchestrationStrategy {
     #[staticmethod]
     fn sequential() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::Sequential }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::Sequential,
+        }
     }
     #[staticmethod]
     fn parallel() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::Parallel }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::Parallel,
+        }
     }
     #[staticmethod]
     fn autonomous() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::Autonomous }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::Autonomous,
+        }
     }
     #[staticmethod]
     fn dynamic() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::Dynamic }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::Dynamic,
+        }
     }
     #[staticmethod]
     fn round_robin() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::RoundRobin }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::RoundRobin,
+        }
     }
     #[staticmethod]
     fn hierarchical() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::Hierarchical }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::Hierarchical,
+        }
     }
     #[staticmethod]
     fn broadcast() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::Broadcast }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::Broadcast,
+        }
     }
     #[staticmethod]
     fn map_reduce() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::MapReduce }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::MapReduce,
+        }
     }
     #[staticmethod]
     fn conditional_routing() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::ConditionalRouting }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::ConditionalRouting,
+        }
     }
     #[staticmethod]
     fn retry_fallback() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::RetryFallback }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::RetryFallback,
+        }
     }
     #[staticmethod]
     fn debate() -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::Debate }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::Debate,
+        }
     }
     #[staticmethod]
     fn custom(name: &str) -> Self {
-        PyOrchestrationStrategy { inner: OrchestrationStrategy::Custom(name.to_string()) }
+        PyOrchestrationStrategy {
+            inner: OrchestrationStrategy::Custom(name.to_string()),
+        }
     }
 
     fn __repr__(&self) -> String {
-        format!("OrchestrationStrategy.{}", match &self.inner {
-            OrchestrationStrategy::Sequential => "sequential".to_string(),
-            OrchestrationStrategy::Parallel => "parallel".to_string(),
-            OrchestrationStrategy::Autonomous => "autonomous".to_string(),
-            OrchestrationStrategy::Dynamic => "dynamic".to_string(),
-            OrchestrationStrategy::RoundRobin => "round_robin".to_string(),
-            OrchestrationStrategy::Hierarchical => "hierarchical".to_string(),
-            OrchestrationStrategy::Broadcast => "broadcast".to_string(),
-            OrchestrationStrategy::MapReduce => "map_reduce".to_string(),
-            OrchestrationStrategy::ConditionalRouting => "conditional_routing".to_string(),
-            OrchestrationStrategy::RetryFallback => "retry_fallback".to_string(),
-            OrchestrationStrategy::Debate => "debate".to_string(),
-            OrchestrationStrategy::Custom(name) => format!("custom({})", name),
-        })
+        format!(
+            "OrchestrationStrategy.{}",
+            match &self.inner {
+                OrchestrationStrategy::Sequential => "sequential".to_string(),
+                OrchestrationStrategy::Parallel => "parallel".to_string(),
+                OrchestrationStrategy::Autonomous => "autonomous".to_string(),
+                OrchestrationStrategy::Dynamic => "dynamic".to_string(),
+                OrchestrationStrategy::RoundRobin => "round_robin".to_string(),
+                OrchestrationStrategy::Hierarchical => "hierarchical".to_string(),
+                OrchestrationStrategy::Broadcast => "broadcast".to_string(),
+                OrchestrationStrategy::MapReduce => "map_reduce".to_string(),
+                OrchestrationStrategy::ConditionalRouting => "conditional_routing".to_string(),
+                OrchestrationStrategy::RetryFallback => "retry_fallback".to_string(),
+                OrchestrationStrategy::Debate => "debate".to_string(),
+                OrchestrationStrategy::Custom(name) => format!("custom({})", name),
+            }
+        )
     }
 }
 
@@ -238,23 +275,32 @@ pub struct PyParallelAggregation {
 impl PyParallelAggregation {
     #[staticmethod]
     fn first_success() -> Self {
-        PyParallelAggregation { inner: ParallelAggregation::FirstSuccess }
+        PyParallelAggregation {
+            inner: ParallelAggregation::FirstSuccess,
+        }
     }
     #[staticmethod]
     fn all() -> Self {
-        PyParallelAggregation { inner: ParallelAggregation::All }
+        PyParallelAggregation {
+            inner: ParallelAggregation::All,
+        }
     }
     #[staticmethod]
     fn majority() -> Self {
-        PyParallelAggregation { inner: ParallelAggregation::Majority }
+        PyParallelAggregation {
+            inner: ParallelAggregation::Majority,
+        }
     }
 
     fn __repr__(&self) -> String {
-        format!("ParallelAggregation.{}", match &self.inner {
-            ParallelAggregation::FirstSuccess => "first_success",
-            ParallelAggregation::All => "all",
-            ParallelAggregation::Majority => "majority",
-        })
+        format!(
+            "ParallelAggregation.{}",
+            match &self.inner {
+                ParallelAggregation::FirstSuccess => "first_success",
+                ParallelAggregation::All => "all",
+                ParallelAggregation::Majority => "majority",
+            }
+        )
     }
 }
 
@@ -276,28 +322,39 @@ pub struct PyParallelMergeStrategy {
 impl PyParallelMergeStrategy {
     #[staticmethod]
     fn first_success() -> Self {
-        PyParallelMergeStrategy { inner: ParallelMergeStrategy::FirstSuccess }
+        PyParallelMergeStrategy {
+            inner: ParallelMergeStrategy::FirstSuccess,
+        }
     }
     #[staticmethod]
     fn latest() -> Self {
-        PyParallelMergeStrategy { inner: ParallelMergeStrategy::Latest }
+        PyParallelMergeStrategy {
+            inner: ParallelMergeStrategy::Latest,
+        }
     }
     #[staticmethod]
     fn deep_merge() -> Self {
-        PyParallelMergeStrategy { inner: ParallelMergeStrategy::DeepMerge }
+        PyParallelMergeStrategy {
+            inner: ParallelMergeStrategy::DeepMerge,
+        }
     }
     #[staticmethod]
     fn custom(name: &str) -> Self {
-        PyParallelMergeStrategy { inner: ParallelMergeStrategy::Custom(name.to_string()) }
+        PyParallelMergeStrategy {
+            inner: ParallelMergeStrategy::Custom(name.to_string()),
+        }
     }
 
     fn __repr__(&self) -> String {
-        format!("ParallelMergeStrategy.{}", match &self.inner {
-            ParallelMergeStrategy::FirstSuccess => "first_success".to_string(),
-            ParallelMergeStrategy::Latest => "latest".to_string(),
-            ParallelMergeStrategy::DeepMerge => "deep_merge".to_string(),
-            ParallelMergeStrategy::Custom(name) => format!("custom({})", name),
-        })
+        format!(
+            "ParallelMergeStrategy.{}",
+            match &self.inner {
+                ParallelMergeStrategy::FirstSuccess => "first_success".to_string(),
+                ParallelMergeStrategy::Latest => "latest".to_string(),
+                ParallelMergeStrategy::DeepMerge => "deep_merge".to_string(),
+                ParallelMergeStrategy::Custom(name) => format!("custom({})", name),
+            }
+        )
     }
 }
 
@@ -371,7 +428,9 @@ impl PySupervisorNodeConfig {
         strategy: Option<PyOrchestrationStrategy>,
     ) -> PyResult<Self> {
         if children.is_empty() {
-            return Err(crate::error::AgentExecutionError::new_err("children list must not be empty"));
+            return Err(crate::error::AgentExecutionError::new_err(
+                "children list must not be empty",
+            ));
         }
         Ok(PySupervisorNodeConfig {
             inner: SupervisorNodeConfig::new(name, children)
@@ -427,7 +486,9 @@ impl PySupervisorNodeConfig {
     /// Add a skip condition for a child.
     /// Example: `config.add_skip_condition("analyst", "analysis != null")`
     fn add_skip_condition(&mut self, child_name: &str, condition: &str) {
-        self.inner.skip_conditions.insert(child_name.to_string(), condition.to_string());
+        self.inner
+            .skip_conditions
+            .insert(child_name.to_string(), condition.to_string());
     }
 
     // ── Autonomous strategy fields ──
@@ -444,7 +505,9 @@ impl PySupervisorNodeConfig {
 
     /// Map a required output key to the child responsible for producing it.
     fn add_output_owner(&mut self, output_key: &str, child_name: &str) {
-        self.inner.output_owners.insert(output_key.to_string(), child_name.to_string());
+        self.inner
+            .output_owners
+            .insert(output_key.to_string(), child_name.to_string());
     }
 
     /// Set maximum iterations for autonomous/dynamic/debate mode.
@@ -495,7 +558,9 @@ impl PySupervisorNodeConfig {
     /// Add a routing rule mapping a condition to a child agent.
     /// Example: `config.add_routing_rule("task_type == code", "code_agent")`
     fn add_routing_rule(&mut self, condition: &str, child_name: &str) {
-        self.inner.routing_rules.insert(condition.to_string(), child_name.to_string());
+        self.inner
+            .routing_rules
+            .insert(condition.to_string(), child_name.to_string());
     }
 
     // ── RetryFallback strategy fields ──
@@ -638,13 +703,16 @@ impl PySupervisor {
         routing_rules: Option<HashMap<String, String>>,
     ) -> PyResult<Self> {
         if let Some(children_list) = children {
-            let name: String = Python::with_gil(|py| {
-                name_or_router.extract::<String>(py)
-            }).map_err(|_| crate::error::AgentExecutionError::new_err(
+            let name: String = Python::with_gil(|py| name_or_router.extract::<String>(py))
+                .map_err(|_| {
+                    crate::error::AgentExecutionError::new_err(
                 "When children are provided, the first argument must be the supervisor name (str)"
-            ))?;
+            )
+                })?;
             if children_list.is_empty() {
-                return Err(crate::error::AgentExecutionError::new_err("children list must not be empty"));
+                return Err(crate::error::AgentExecutionError::new_err(
+                    "children list must not be empty",
+                ));
             }
             let mut config = SupervisorNodeConfig::new(name, children_list)
                 .strategy(strategy.map(|s| s.inner).unwrap_or_default())
@@ -653,24 +721,66 @@ impl PySupervisor {
                 .collect_stats(collect_stats)
                 .max_iterations(max_iterations)
                 .debate_rounds(debate_rounds);
-            if let Some(ms) = child_timeout_ms   { config = config.child_timeout_ms(ms); }
-            if let Some(ms) = timeout_ms          { config = config.timeout_ms(ms); }
-            if let Some(s)  = merge_strategy      { config = config.merge_strategy(s.inner); }
-            if let Some(a)  = parallel_aggregation { config = config.parallel_aggregation(a.inner); }
-            if let Some(n)  = max_concurrent      { config = config.max_concurrent(n); }
-            if let Some(g)  = goal                { config = config.goal(g); }
-            if let Some(ro) = required_outputs    { config = config.required_outputs(ro); }
-            if let Some(oo) = output_owners       { for (k, v) in oo { config = config.add_output_owner(k, v); } }
-            if let Some(sp) = selector_prompt     { config = config.selector_prompt(sp); }
-            if let Some(tk) = tasks_key           { config = config.tasks_key(tk); }
-            if let Some(sc) = selection_criteria  { config = config.selection_criteria(sc); }
-            if let Some(sk) = score_key           { config = config.score_key(sk); }
-            if let Some(mk) = map_key             { config = config.map_key(mk); }
-            if let Some(rk) = reduce_key          { config = config.reduce_key(rk); }
-            if let Some(fo) = fallback_order      { config = config.fallback_order(fo); }
-            if let Some(dk) = debate_key          { config = config.debate_key(dk); }
-            if let Some(sc) = skip_conditions     { for (k, v) in sc { config = config.add_skip_condition(k, v); } }
-            if let Some(rr) = routing_rules       { for (k, v) in rr { config = config.add_routing_rule(k, v); } }
+            if let Some(ms) = child_timeout_ms {
+                config = config.child_timeout_ms(ms);
+            }
+            if let Some(ms) = timeout_ms {
+                config = config.timeout_ms(ms);
+            }
+            if let Some(s) = merge_strategy {
+                config = config.merge_strategy(s.inner);
+            }
+            if let Some(a) = parallel_aggregation {
+                config = config.parallel_aggregation(a.inner);
+            }
+            if let Some(n) = max_concurrent {
+                config = config.max_concurrent(n);
+            }
+            if let Some(g) = goal {
+                config = config.goal(g);
+            }
+            if let Some(ro) = required_outputs {
+                config = config.required_outputs(ro);
+            }
+            if let Some(oo) = output_owners {
+                for (k, v) in oo {
+                    config = config.add_output_owner(k, v);
+                }
+            }
+            if let Some(sp) = selector_prompt {
+                config = config.selector_prompt(sp);
+            }
+            if let Some(tk) = tasks_key {
+                config = config.tasks_key(tk);
+            }
+            if let Some(sc) = selection_criteria {
+                config = config.selection_criteria(sc);
+            }
+            if let Some(sk) = score_key {
+                config = config.score_key(sk);
+            }
+            if let Some(mk) = map_key {
+                config = config.map_key(mk);
+            }
+            if let Some(rk) = reduce_key {
+                config = config.reduce_key(rk);
+            }
+            if let Some(fo) = fallback_order {
+                config = config.fallback_order(fo);
+            }
+            if let Some(dk) = debate_key {
+                config = config.debate_key(dk);
+            }
+            if let Some(sc) = skip_conditions {
+                for (k, v) in sc {
+                    config = config.add_skip_condition(k, v);
+                }
+            }
+            if let Some(rr) = routing_rules {
+                for (k, v) in rr {
+                    config = config.add_routing_rule(k, v);
+                }
+            }
             Ok(PySupervisor {
                 router: None,
                 config: Some(config),
@@ -713,12 +823,14 @@ impl PySupervisor {
     fn add_agent(&mut self, py: Python<'_>, name: &str, agent: PyObject) -> PyResult<()> {
         // Try to extract as PyStateGraph first
         if let Ok(graph) = agent.extract::<PyStateGraph>(py) {
-            self.agents.push((name.to_string(), AgentChild::Graph(graph.inner.clone())));
+            self.agents
+                .push((name.to_string(), AgentChild::Graph(graph.inner.clone())));
         } else if agent.bind(py).is_callable() {
-            self.agents.push((name.to_string(), AgentChild::Callable(agent.clone_ref(py))));
+            self.agents
+                .push((name.to_string(), AgentChild::Callable(agent.clone_ref(py))));
         } else {
             return Err(crate::error::AgentExecutionError::new_err(
-                "agent must be a StateGraph or a callable (state) -> state"
+                "agent must be a StateGraph or a callable (state) -> state",
             ));
         }
         Ok(())
@@ -752,7 +864,9 @@ impl PySupervisor {
         } else if let Some(ref router) = self.router {
             self.run_router(router, &py_state)
         } else {
-            Err(crate::error::AgentExecutionError::new_err("Supervisor has no router or config"))
+            Err(crate::error::AgentExecutionError::new_err(
+                "Supervisor has no router or config",
+            ))
         }
     }
 
@@ -763,24 +877,25 @@ impl PySupervisor {
 
     fn __repr__(&self) -> String {
         let names: Vec<&str> = self.agents.iter().map(|(n, _)| n.as_str()).collect();
-        let mode = if self.config.is_some() { "strategy" } else { "router" };
+        let mode = if self.config.is_some() {
+            "strategy"
+        } else {
+            "router"
+        };
         format!("Supervisor(mode={}, agents={:?})", mode, names)
     }
 }
 
 impl PySupervisor {
     /// Strategy-based execution using the real Rust SupervisorNode.
-    fn run_strategy(
-        &self,
-        config: &SupervisorNodeConfig,
-        state: &PyState,
-    ) -> PyResult<PyState> {
-
+    fn run_strategy(&self, config: &SupervisorNodeConfig, state: &PyState) -> PyResult<PyState> {
         // Issue #14: validate ALL declared children exist before executing any of
         // them. Collect every missing name so the error lists them all at once
         // rather than stopping at the first mismatch.
         let registered: Vec<&str> = self.agents.iter().map(|(n, _)| n.as_str()).collect();
-        let missing: Vec<&str> = config.children.iter()
+        let missing: Vec<&str> = config
+            .children
+            .iter()
             .filter(|c| !self.agents.iter().any(|(n, _)| n == *c))
             .map(|c| c.as_str())
             .collect();
@@ -821,8 +936,12 @@ impl PySupervisor {
         }
 
         // Create the real Rust SupervisorNode
-        let supervisor = SupervisorNode::from_config(config.clone(), children)
-            .map_err(|e| crate::error::AgentExecutionError::new_err(format!("SupervisorNode config error: {}", e)))?;
+        let supervisor = SupervisorNode::from_config(config.clone(), children).map_err(|e| {
+            crate::error::AgentExecutionError::new_err(format!(
+                "SupervisorNode config error: {}",
+                e
+            ))
+        })?;
 
         // Execute
         let result = crate::run_async(async {
@@ -833,7 +952,9 @@ impl PySupervisor {
         match result {
             Ok(output) => {
                 if output.success {
-                    Ok(PyState { inner: output.state })
+                    Ok(PyState {
+                        inner: output.state,
+                    })
                 } else {
                     // Store error in state but still return it
                     let s = output.state;
@@ -843,16 +964,15 @@ impl PySupervisor {
                     Ok(PyState { inner: s })
                 }
             }
-            Err(e) => Err(crate::error::AgentExecutionError::new_err(format!("Supervisor execution error: {}", e))),
+            Err(e) => Err(crate::error::AgentExecutionError::new_err(format!(
+                "Supervisor execution error: {}",
+                e
+            ))),
         }
     }
 
     /// Simple router-based execution (backwards compatible with original API).
-    fn run_router(
-        &self,
-        router: &PyObject,
-        state: &PyState,
-    ) -> PyResult<PyState> {
+    fn run_router(&self, router: &PyObject, state: &PyState) -> PyResult<PyState> {
         let router = Python::with_gil(|py| router.clone_ref(py));
         let finish_marker = self.finish_marker_val.clone();
         let max_rounds = self.max_rounds_val;
@@ -860,26 +980,32 @@ impl PySupervisor {
 
         for _round in 0..max_rounds {
             let next_agent = Python::with_gil(|py| -> PyResult<String> {
-                let py_state = PyState { inner: current_state.clone() };
+                let py_state = PyState {
+                    inner: current_state.clone(),
+                };
                 let result = router.call1(py, (py_state,))?;
                 result.extract::<String>(py)
             })?;
 
             if next_agent == finish_marker {
-                return Ok(PyState { inner: current_state });
+                return Ok(PyState {
+                    inner: current_state,
+                });
             }
 
             let agent = self.agents.iter().find(|(n, _)| n == &next_agent);
             match agent {
                 Some((_, AgentChild::Graph(graph))) => {
-                    current_state = 
-                        crate::run_async(graph.invoke(current_state))
-                        .map_err(|e| crate::error::AgentExecutionError::new_err(format!("{}", e)))?;
+                    current_state = crate::run_async(graph.invoke(current_state)).map_err(|e| {
+                        crate::error::AgentExecutionError::new_err(format!("{}", e))
+                    })?;
                 }
                 Some((_, AgentChild::Callable(func))) => {
                     current_state = Python::with_gil(|py| -> PyResult<DynState> {
                         let f = func.clone_ref(py);
-                        let py_state = PyState { inner: current_state.clone() };
+                        let py_state = PyState {
+                            inner: current_state.clone(),
+                        };
                         let py_result = f.call1(py, (py_state,))?;
                         let result_state: PyState = py_result.extract(py)?;
                         Ok(result_state.inner)

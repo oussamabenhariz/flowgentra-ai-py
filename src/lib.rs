@@ -2,125 +2,128 @@
 //!
 //! Exposes the core Rust library to Python through native extension module.
 
+#![allow(clippy::useless_conversion)]
+#![allow(unexpected_cfgs)]
+
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use serde_json::Value;
 
-mod channel;
-mod snapshot;
-mod checkpointer;
-mod py_reducers;
-mod state;
+mod advanced_nodes;
 mod agent;
 mod agents;
-mod llm;
-mod config;
-mod graph;
-mod rag;
-mod vector_store;
-mod memory;
-mod conversation_memory;
-mod error;
-mod tools;
-mod tool_registry;
-mod evaluation;
-mod text_splitter;
-mod prompt_parser;
-mod message_graph;
-mod supervisor;
-mod routing;
-mod observability;
-mod mcp;
-mod document_loader;
-mod ingestion;
-mod rag_eval;
-mod reranker;
-mod token_buffer_memory;
-mod file_checkpointer;
-mod chroma;
-mod vector_stores;
-mod builtin_tools;
-mod py_search;
-mod py_knowledge;
-mod py_code_exec;
-mod py_files_extended;
-mod py_data;
-mod py_human;
-mod py_communication;
-mod py_external_apis;
-mod tool_node;
-mod visualization;
-mod advanced_nodes;
-mod llm_reranker;
-mod memory_aware_agent;
-mod rag_config;
-mod eval_config;
-mod remaining;
-mod planner_node;
-mod builtin_node_bindings;
-mod evaluation_node;
-mod sql_db;
-mod doc_store;
 mod async_checkpointers;
-mod retrievers_advanced;
-mod rag_doc_store;
-mod extra_embeddings;
-mod indexing;
-mod loaders_extra;
-mod web_retrievers;
-mod skills;
+mod builtin_node_bindings;
+mod builtin_tools;
+mod channel;
+mod checkpointer;
+mod chroma;
+mod config;
+mod conversation_memory;
+mod doc_store;
+mod document_loader;
+mod error;
 mod eval_advanced;
+mod eval_config;
+mod evaluation;
+mod evaluation_node;
+mod extra_embeddings;
+mod file_checkpointer;
+mod graph;
+mod indexing;
+mod ingestion;
+mod llm;
+mod llm_reranker;
+mod loaders_extra;
+mod mcp;
+mod memory;
+mod memory_aware_agent;
+mod message_graph;
 mod middleware;
-mod prometheus;
+mod observability;
 mod otel;
+mod planner_node;
+mod prometheus;
+mod prompt_parser;
+mod py_code_exec;
+mod py_communication;
+mod py_data;
+mod py_external_apis;
+mod py_files_extended;
+mod py_human;
+mod py_knowledge;
+mod py_reducers;
+mod py_search;
+mod rag;
+mod rag_config;
+mod rag_doc_store;
+mod rag_eval;
+mod remaining;
+mod reranker;
+mod retrievers_advanced;
+mod routing;
+mod skills;
+mod snapshot;
+mod sql_db;
+mod state;
+mod supervisor;
+mod text_splitter;
+mod token_buffer_memory;
+mod tool_node;
+mod tool_registry;
+mod tools;
+mod vector_store;
+mod vector_stores;
+mod visualization;
+mod web_retrievers;
 
+use advanced_nodes::*;
 use agent::*;
 use agents::*;
-use llm::*;
-use config::*;
-use graph::*;
-use rag::*;
-use vector_store::*;
-use memory::*;
-use conversation_memory::*;
-use tools::*;
-use tool_registry::*;
-use evaluation::*;
-use text_splitter::*;
-use prompt_parser::*;
-use message_graph::*;
-use supervisor::*;
-use routing::*;
-use observability::*;
-use mcp::*;
-use document_loader::*;
-use ingestion::*;
-use rag_eval::*;
-use reranker::*;
-use token_buffer_memory::*;
-use chroma::*;
-use vector_stores::*;
-use builtin_tools::*;
-use tool_node::*;
-use visualization::*;
-use advanced_nodes::*;
-use llm_reranker::*;
-use memory_aware_agent::*;
-use rag_config::*;
-use eval_config::*;
-use remaining::*;
-use planner_node::*;
 use builtin_node_bindings::*;
-use evaluation_node::*;
-use sql_db::*;
+use builtin_tools::*;
+use chroma::*;
+use config::*;
+use conversation_memory::*;
 use doc_store::*;
-use retrievers_advanced::*;
-use rag_doc_store::*;
-use extra_embeddings::*;
-use indexing::*;
-use loaders_extra::*;
-use web_retrievers::*;
+use document_loader::*;
 use eval_advanced::*;
+use eval_config::*;
+use evaluation::*;
+use evaluation_node::*;
+use extra_embeddings::*;
+use graph::*;
+use indexing::*;
+use ingestion::*;
+use llm::*;
+use llm_reranker::*;
+use loaders_extra::*;
+use mcp::*;
+use memory::*;
+use memory_aware_agent::*;
+use message_graph::*;
+use observability::*;
+use planner_node::*;
+use prompt_parser::*;
+use rag::*;
+use rag_config::*;
+use rag_doc_store::*;
+use rag_eval::*;
+use remaining::*;
+use reranker::*;
+use retrievers_advanced::*;
+use routing::*;
+use sql_db::*;
+use supervisor::*;
+use text_splitter::*;
+use token_buffer_memory::*;
+use tool_node::*;
+use tool_registry::*;
+use tools::*;
+use vector_store::*;
+use vector_stores::*;
+use visualization::*;
+use web_retrievers::*;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -350,9 +353,18 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     tools_module.add_class::<py_external_apis::PyAlphaVantageTool>()?;
     // ToolNode helper
     tools_module.add_class::<PyToolNode>()?;
-    tools_module.add_function(wrap_pyfunction!(tool_node::py_create_tool_node, &tools_module)?)?;
-    tools_module.add_function(wrap_pyfunction!(tool_node::py_store_tool_calls, &tools_module)?)?;
-    tools_module.add_function(wrap_pyfunction!(tool_node::py_check_tools_condition, &tools_module)?)?;
+    tools_module.add_function(wrap_pyfunction!(
+        tool_node::py_create_tool_node,
+        &tools_module
+    )?)?;
+    tools_module.add_function(wrap_pyfunction!(
+        tool_node::py_store_tool_calls,
+        &tools_module
+    )?)?;
+    tools_module.add_function(wrap_pyfunction!(
+        tool_node::py_check_tools_condition,
+        &tools_module
+    )?)?;
     m.add_submodule(&tools_module)?;
 
     // ── RAG Submodule ──────────────────────────────────────────────────────────
@@ -413,7 +425,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     rag_module.add_class::<PyMultiVectorRetriever>()?;
     rag_module.add_class::<PyParentDocumentRetriever>()?;
     rag_module.add_class::<PyReorderStrategy>()?;
-    rag_module.add_function(wrap_pyfunction!(retrievers_advanced::py_reorder_for_long_context, &rag_module)?)?;
+    rag_module.add_function(wrap_pyfunction!(
+        retrievers_advanced::py_reorder_for_long_context,
+        &rag_module
+    )?)?;
     rag_module.add_class::<PySelfQueryRetriever>()?;
     rag_module.add_class::<PyLLMCompressor>()?;
     rag_module.add_class::<PyDocumentCompressorPipeline>()?;
@@ -486,7 +501,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     eval_module.add_function(wrap_pyfunction!(rag_eval::py_mrr, &eval_module)?)?;
     eval_module.add_function(wrap_pyfunction!(rag_eval::py_mean_ndcg, &eval_module)?)?;
     eval_module.add_function(wrap_pyfunction!(rag_eval::py_rag_evaluate, &eval_module)?)?;
-    eval_module.add_function(wrap_pyfunction!(remaining::py_evaluate_output_score, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(
+        remaining::py_evaluate_output_score,
+        &eval_module
+    )?)?;
     // Advanced evaluation: confidence, node scoring, retry, smart fallback
     eval_module.add_class::<PyConfidenceLevel>()?;
     eval_module.add_class::<PyConfidenceConfig>()?;
@@ -504,7 +522,10 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     eval_module.add_function(wrap_pyfunction!(py_retry_feedback, &eval_module)?)?;
     eval_module.add_function(wrap_pyfunction!(py_check_circuit_breaker, &eval_module)?)?;
     eval_module.add_function(wrap_pyfunction!(py_retry_generate_report, &eval_module)?)?;
-    eval_module.add_function(wrap_pyfunction!(py_generate_content_fallback, &eval_module)?)?;
+    eval_module.add_function(wrap_pyfunction!(
+        py_generate_content_fallback,
+        &eval_module
+    )?)?;
     eval_module.add_function(wrap_pyfunction!(py_refine_content_fallback, &eval_module)?)?;
     eval_module.add_function(wrap_pyfunction!(py_fallback_retry_message, &eval_module)?)?;
     eval_module.add_function(wrap_pyfunction!(py_should_fallback, &eval_module)?)?;
@@ -517,14 +538,29 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     obs_module.add_class::<observability::PyEventBroadcaster>()?;
     obs_module.add_class::<observability::PyEventReceiver>()?;
     obs_module.add_class::<observability::PyReplayMode>()?;
-    obs_module.add_function(wrap_pyfunction!(observability::py_init_tracing, &obs_module)?)?;
-    obs_module.add_function(wrap_pyfunction!(visualization::py_visualize_graph, &obs_module)?)?;
-    obs_module.add_function(wrap_pyfunction!(visualization::py_graph_to_dot, &obs_module)?)?;
-    obs_module.add_function(wrap_pyfunction!(visualization::py_graph_to_mermaid, &obs_module)?)?;
+    obs_module.add_function(wrap_pyfunction!(
+        observability::py_init_tracing,
+        &obs_module
+    )?)?;
+    obs_module.add_function(wrap_pyfunction!(
+        visualization::py_visualize_graph,
+        &obs_module
+    )?)?;
+    obs_module.add_function(wrap_pyfunction!(
+        visualization::py_graph_to_dot,
+        &obs_module
+    )?)?;
+    obs_module.add_function(wrap_pyfunction!(
+        visualization::py_graph_to_mermaid,
+        &obs_module
+    )?)?;
     // Prometheus metrics
     obs_module.add_class::<prometheus::PyPrometheusExporter>()?;
     obs_module.add_class::<prometheus::PyMetricsCollector>()?;
-    obs_module.add_function(wrap_pyfunction!(prometheus::py_record_llm_tokens, &obs_module)?)?;
+    obs_module.add_function(wrap_pyfunction!(
+        prometheus::py_record_llm_tokens,
+        &obs_module
+    )?)?;
     // OpenTelemetry spans
     obs_module.add_class::<otel::PyOtelStatus>()?;
     obs_module.add_class::<otel::PyOtelAttribute>()?;
@@ -570,8 +606,14 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     data_module.add_class::<PyLoadedDocument>()?;
     data_module.add_class::<PyIngestionPipeline>()?;
     data_module.add_class::<PyIngestionStats>()?;
-    data_module.add_function(wrap_pyfunction!(document_loader::py_load_document, &data_module)?)?;
-    data_module.add_function(wrap_pyfunction!(document_loader::py_load_directory, &data_module)?)?;
+    data_module.add_function(wrap_pyfunction!(
+        document_loader::py_load_document,
+        &data_module
+    )?)?;
+    data_module.add_function(wrap_pyfunction!(
+        document_loader::py_load_directory,
+        &data_module
+    )?)?;
     m.add_submodule(&data_module)?;
 
     // ── Reranking Submodule ────────────────────────────────────────────────────
@@ -681,7 +723,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register in sys.modules so both `from _native import skills as _s` and
     // `from _native.skills import X` work — PyO3 add_submodule alone only adds
     // the attribute, not a sys.modules entry.
-    m.py().import_bound("sys")?
+    m.py()
+        .import_bound("sys")?
         .getattr("modules")?
         .set_item("flowgentra_ai._native.skills", &skills_module)?;
 

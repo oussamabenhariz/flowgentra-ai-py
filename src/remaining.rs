@@ -6,16 +6,16 @@ use pyo3::types::PyDict;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use flowgentra_ai::core::rag::{
-    ChunkMetadata, InMemoryVectorStore, RerankStrategy, RetrieverStrategy,
-    VectorStore, VectorStoreBackend,
-};
 use flowgentra_ai::core::node::evaluation_node::evaluate_output_score;
+use flowgentra_ai::core::rag::{
+    ChunkMetadata, InMemoryVectorStore, RerankStrategy, RetrieverStrategy, VectorStore,
+    VectorStoreBackend,
+};
 
 use crate::error::to_py_err_generic;
+use crate::py_to_json;
 use crate::rag::{PyDocument, PySearchResult};
 use crate::rag_config::PyRAGConfig;
-use crate::py_to_json;
 
 // ─── PyChunkMetadata ────────────────────────────────────────────────────────
 
@@ -94,28 +94,36 @@ impl PyRetrieverStrategy {
     /// Pure semantic similarity search.
     #[staticmethod]
     fn semantic() -> Self {
-        PyRetrieverStrategy { inner: RetrieverStrategy::semantic() }
+        PyRetrieverStrategy {
+            inner: RetrieverStrategy::semantic(),
+        }
     }
 
     /// Hybrid: combine semantic + keyword search.
     #[staticmethod]
     #[pyo3(signature = (keyword_weight=0.3))]
     fn hybrid(keyword_weight: f32) -> Self {
-        PyRetrieverStrategy { inner: RetrieverStrategy::hybrid(keyword_weight) }
+        PyRetrieverStrategy {
+            inner: RetrieverStrategy::hybrid(keyword_weight),
+        }
     }
 
     /// Multi-query: expand query and retrieve for each variant.
     #[staticmethod]
     #[pyo3(signature = (variants=3))]
     fn multiquery(variants: usize) -> Self {
-        PyRetrieverStrategy { inner: RetrieverStrategy::multiquery(variants) }
+        PyRetrieverStrategy {
+            inner: RetrieverStrategy::multiquery(variants),
+        }
     }
 
     /// Decomposed: break complex queries into sub-queries.
     #[staticmethod]
     #[pyo3(signature = (depth=2))]
     fn decomposed(depth: usize) -> Self {
-        PyRetrieverStrategy { inner: RetrieverStrategy::decomposed(depth) }
+        PyRetrieverStrategy {
+            inner: RetrieverStrategy::decomposed(depth),
+        }
     }
 
     /// Custom chain strategy.
@@ -137,8 +145,13 @@ impl PyRetrieverStrategy {
             RetrieverStrategy::MultiQuery { query_variants } => {
                 format!("RetrieverStrategy.MultiQuery(variants={})", query_variants)
             }
-            RetrieverStrategy::Decomposed { decomposition_depth } => {
-                format!("RetrieverStrategy.Decomposed(depth={})", decomposition_depth)
+            RetrieverStrategy::Decomposed {
+                decomposition_depth,
+            } => {
+                format!(
+                    "RetrieverStrategy.Decomposed(depth={})",
+                    decomposition_depth
+                )
             }
             RetrieverStrategy::Custom { chain_name } => {
                 format!("RetrieverStrategy.Custom('{}')", chain_name)
@@ -166,13 +179,17 @@ impl PyRerankStrategy {
     /// No re-ranking (pass-through).
     #[staticmethod]
     fn none() -> Self {
-        PyRerankStrategy { inner: RerankStrategy::None }
+        PyRerankStrategy {
+            inner: RerankStrategy::None,
+        }
     }
 
     /// Re-rank using an LLM to score relevance.
     #[staticmethod]
     fn llm() -> Self {
-        PyRerankStrategy { inner: RerankStrategy::LLM }
+        PyRerankStrategy {
+            inner: RerankStrategy::LLM,
+        }
     }
 
     /// Re-rank using a cross-encoder model.
@@ -234,12 +251,7 @@ impl PyVectorStore {
     }
 
     /// Index a document with text and metadata.
-    fn index_document(
-        &self,
-        id: &str,
-        text: &str,
-        metadata: &Bound<'_, PyDict>,
-    ) -> PyResult<()> {
+    fn index_document(&self, id: &str, text: &str, metadata: &Bound<'_, PyDict>) -> PyResult<()> {
         let mut map = serde_json::Map::new();
         for (k, v) in metadata.iter() {
             let key: String = k.extract()?;
@@ -255,13 +267,8 @@ impl PyVectorStore {
 
     /// Search by embedding vector.
     #[pyo3(signature = (query_embedding, top_k=5))]
-    fn search(
-        &self,
-        query_embedding: Vec<f32>,
-        top_k: usize,
-    ) -> PyResult<Vec<PySearchResult>> {
-        let results = 
-            crate::run_async(self.inner.search(query_embedding, top_k, None))
+    fn search(&self, query_embedding: Vec<f32>, top_k: usize) -> PyResult<Vec<PySearchResult>> {
+        let results = crate::run_async(self.inner.search(query_embedding, top_k, None))
             .map_err(to_py_err_generic)?;
         Ok(results
             .into_iter()
@@ -271,29 +278,23 @@ impl PyVectorStore {
 
     /// Delete a document by ID.
     fn delete(&self, doc_id: &str) -> PyResult<()> {
-        crate::run_async(self.inner.delete(doc_id))
-            .map_err(to_py_err_generic)
+        crate::run_async(self.inner.delete(doc_id)).map_err(to_py_err_generic)
     }
 
     /// Update a document's text.
     fn update(&self, id: &str, text: &str) -> PyResult<()> {
-        crate::run_async(self.inner.update(id, text))
-            .map_err(to_py_err_generic)
+        crate::run_async(self.inner.update(id, text)).map_err(to_py_err_generic)
     }
 
     /// Get a document by ID.
     fn get(&self, doc_id: &str) -> PyResult<PyDocument> {
-        let doc = 
-            crate::run_async(self.inner.get(doc_id))
-            .map_err(to_py_err_generic)?;
+        let doc = crate::run_async(self.inner.get(doc_id)).map_err(to_py_err_generic)?;
         Ok(PyDocument { inner: doc })
     }
 
     /// List all documents.
     fn list(&self) -> PyResult<Vec<PyDocument>> {
-        let docs = 
-            crate::run_async(self.inner.list())
-            .map_err(to_py_err_generic)?;
+        let docs = crate::run_async(self.inner.list()).map_err(to_py_err_generic)?;
         Ok(docs.into_iter().map(|d| PyDocument { inner: d }).collect())
     }
 

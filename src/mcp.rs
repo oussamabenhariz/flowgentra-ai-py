@@ -5,11 +5,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use flowgentra_ai::core::mcp::{
-    MCPAuth, MCPClient, MCPConfig, MCPConnectionSettings, MCPConnectionType, MCPPromptArgument,
-    MCPResource, MCPResourceContent, MCPTool, MCPClientFactory,
-    StdioConnection,
-    SSEConnection, SSEMessage,
-    DockerConfig, DockerConnection, DockerConnectionBuilder,
+    DockerConfig, DockerConnection, DockerConnectionBuilder, MCPAuth, MCPClient, MCPClientFactory,
+    MCPConfig, MCPConnectionSettings, MCPConnectionType, MCPPromptArgument, MCPResource,
+    MCPResourceContent, MCPTool, SSEConnection, SSEMessage, StdioConnection,
 };
 
 use crate::error::to_py_err;
@@ -33,7 +31,10 @@ impl PyMCPConnectionType {
     }
 
     fn is_local(&self) -> bool {
-        matches!(self, PyMCPConnectionType::Stdio | PyMCPConnectionType::Docker)
+        matches!(
+            self,
+            PyMCPConnectionType::Stdio | PyMCPConnectionType::Docker
+        )
     }
 
     fn as_str(&self) -> &str {
@@ -45,11 +46,14 @@ impl PyMCPConnectionType {
     }
 
     fn __repr__(&self) -> String {
-        format!("MCPConnectionType.{}", match self {
-            PyMCPConnectionType::Sse => "Sse",
-            PyMCPConnectionType::Stdio => "Stdio",
-            PyMCPConnectionType::Docker => "Docker",
-        })
+        format!(
+            "MCPConnectionType.{}",
+            match self {
+                PyMCPConnectionType::Sse => "Sse",
+                PyMCPConnectionType::Stdio => "Stdio",
+                PyMCPConnectionType::Docker => "Docker",
+            }
+        )
     }
 }
 
@@ -78,7 +82,10 @@ impl PyMCPAuth {
     #[pyo3(signature = (auth_type, credentials))]
     fn new(auth_type: String, credentials: HashMap<String, String>) -> Self {
         PyMCPAuth {
-            inner: MCPAuth { auth_type, credentials },
+            inner: MCPAuth {
+                auth_type,
+                credentials,
+            },
         }
     }
 
@@ -125,6 +132,7 @@ pub struct PyMCPConnectionSettings {
 #[pymethods]
 impl PyMCPConnectionSettings {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
         timeout=None,
         connect_timeout=None,
@@ -163,26 +171,47 @@ impl PyMCPConnectionSettings {
     }
 
     #[getter]
-    fn timeout(&self) -> Option<u64> { self.inner.timeout }
+    fn timeout(&self) -> Option<u64> {
+        self.inner.timeout
+    }
     #[getter]
-    fn connect_timeout(&self) -> Option<u64> { self.inner.connect_timeout }
+    fn connect_timeout(&self) -> Option<u64> {
+        self.inner.connect_timeout
+    }
     #[getter]
-    fn call_timeout(&self) -> Option<u64> { self.inner.call_timeout }
+    fn call_timeout(&self) -> Option<u64> {
+        self.inner.call_timeout
+    }
     #[getter]
-    fn max_retries(&self) -> Option<u32> { self.inner.max_retries }
+    fn max_retries(&self) -> Option<u32> {
+        self.inner.max_retries
+    }
     #[getter]
-    fn container_name(&self) -> Option<String> { self.inner.container_name.clone() }
+    fn container_name(&self) -> Option<String> {
+        self.inner.container_name.clone()
+    }
     #[getter]
-    fn port(&self) -> Option<u16> { self.inner.port }
+    fn port(&self) -> Option<u16> {
+        self.inner.port
+    }
     #[getter]
-    fn host_port(&self) -> Option<u16> { self.inner.host_port }
+    fn host_port(&self) -> Option<u16> {
+        self.inner.host_port
+    }
     #[getter]
-    fn working_dir(&self) -> Option<String> { self.inner.working_dir.clone() }
+    fn working_dir(&self) -> Option<String> {
+        self.inner.working_dir.clone()
+    }
     #[getter]
-    fn env_vars(&self) -> HashMap<String, String> { self.inner.env_vars.clone() }
+    fn env_vars(&self) -> HashMap<String, String> {
+        self.inner.env_vars.clone()
+    }
 
     fn __repr__(&self) -> String {
-        format!("MCPConnectionSettings(timeout={:?}, max_retries={:?})", self.inner.timeout, self.inner.max_retries)
+        format!(
+            "MCPConnectionSettings(timeout={:?}, max_retries={:?})",
+            self.inner.timeout, self.inner.max_retries
+        )
     }
 }
 
@@ -218,7 +247,9 @@ impl PyMCPConfig {
     #[pyo3(signature = (url, name=None))]
     fn sse(url: &str, name: Option<&str>) -> PyResult<Self> {
         let mut builder = MCPConfig::builder().sse(url);
-        if let Some(n) = name { builder = builder.name(n); }
+        if let Some(n) = name {
+            builder = builder.name(n);
+        }
         let config = builder.build().map_err(to_py_err)?;
         Ok(PyMCPConfig { inner: config })
     }
@@ -228,8 +259,12 @@ impl PyMCPConfig {
     #[pyo3(signature = (command, args=None, name=None))]
     fn stdio(command: &str, args: Option<Vec<String>>, name: Option<&str>) -> PyResult<Self> {
         let mut builder = MCPConfig::builder().stdio(command);
-        if let Some(a) = args { builder = builder.args(a); }
-        if let Some(n) = name { builder = builder.name(n); }
+        if let Some(a) = args {
+            builder = builder.args(a);
+        }
+        if let Some(n) = name {
+            builder = builder.name(n);
+        }
         let config = builder.build().map_err(to_py_err)?;
         Ok(PyMCPConfig { inner: config })
     }
@@ -239,7 +274,9 @@ impl PyMCPConfig {
     #[pyo3(signature = (image, name=None))]
     fn docker(image: &str, name: Option<&str>) -> PyResult<Self> {
         let mut builder = MCPConfig::builder().docker(image);
-        if let Some(n) = name { builder = builder.name(n); }
+        if let Some(n) = name {
+            builder = builder.name(n);
+        }
         let config = builder.build().map_err(to_py_err)?;
         Ok(PyMCPConfig { inner: config })
     }
@@ -340,12 +377,17 @@ impl PyMCPConfig {
 
     #[getter]
     fn auth(&self) -> Option<PyMCPAuth> {
-        self.inner.auth.as_ref().map(|a| PyMCPAuth { inner: a.clone() })
+        self.inner
+            .auth
+            .as_ref()
+            .map(|a| PyMCPAuth { inner: a.clone() })
     }
 
     #[getter]
     fn connection_settings(&self) -> PyMCPConnectionSettings {
-        PyMCPConnectionSettings { inner: self.inner.connection_settings.clone() }
+        PyMCPConnectionSettings {
+            inner: self.inner.connection_settings.clone(),
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -354,7 +396,10 @@ impl PyMCPConfig {
             MCPConnectionType::Stdio => "stdio",
             MCPConnectionType::Docker => "docker",
         };
-        format!("MCPConfig(type='{}', name='{}')", conn_type, self.inner.name)
+        format!(
+            "MCPConfig(type='{}', name='{}')",
+            conn_type, self.inner.name
+        )
     }
 }
 
@@ -425,7 +470,10 @@ impl PyMCPResource {
     }
 
     fn __repr__(&self) -> String {
-        format!("MCPResource(uri='{}', name={:?})", self.inner.uri, self.inner.name)
+        format!(
+            "MCPResource(uri='{}', name={:?})",
+            self.inner.uri, self.inner.name
+        )
     }
 }
 
@@ -461,7 +509,10 @@ impl PyMCPResourceContent {
     }
 
     fn __repr__(&self) -> String {
-        format!("MCPResourceContent(uri='{}', mime_type={:?})", self.inner.uri, self.inner.mime_type)
+        format!(
+            "MCPResourceContent(uri='{}', mime_type={:?})",
+            self.inner.uri, self.inner.mime_type
+        )
     }
 }
 
@@ -492,7 +543,10 @@ impl PyMCPPromptArgument {
     }
 
     fn __repr__(&self) -> String {
-        format!("MCPPromptArgument(name='{}', required={})", self.inner.name, self.inner.required)
+        format!(
+            "MCPPromptArgument(name='{}', required={})",
+            self.inner.name, self.inner.required
+        )
     }
 }
 
@@ -525,7 +579,11 @@ impl PyMCPPrompt {
     }
 
     fn __repr__(&self) -> String {
-        format!("MCPPrompt(name='{}', args={})", self.name, self.arguments.len())
+        format!(
+            "MCPPrompt(name='{}', args={})",
+            self.name,
+            self.arguments.len()
+        )
     }
 }
 
@@ -631,7 +689,8 @@ impl PyMCPClient {
     ///     The tool result as a Python object (dict, list, str, etc.)
     fn call_tool(&self, tool_name: &str, arguments: &Bound<'_, PyAny>) -> PyResult<PyObject> {
         let args_json = py_to_json(arguments)?;
-        let result = crate::run_async(self.inner.call_tool(tool_name, args_json)).map_err(to_py_err)?;
+        let result =
+            crate::run_async(self.inner.call_tool(tool_name, args_json)).map_err(to_py_err)?;
         Python::with_gil(|py| json_to_py(py, &result))
     }
 
@@ -642,17 +701,22 @@ impl PyMCPClient {
     ///
     /// Returns:
     ///     List of results in the same order as the input calls
-    fn call_tools_parallel(&self, calls: &Bound<'_, pyo3::types::PyList>) -> PyResult<Vec<PyObject>> {
+    fn call_tools_parallel(
+        &self,
+        calls: &Bound<'_, pyo3::types::PyList>,
+    ) -> PyResult<Vec<PyObject>> {
         let mut calls_json: Vec<(String, serde_json::Value)> = Vec::new();
         for item in calls.iter() {
-            let tuple = item.downcast::<pyo3::types::PyTuple>()
-                .map_err(|_| pyo3::exceptions::PyTypeError::new_err("Each call must be a (name, args) tuple"))?;
+            let tuple = item.downcast::<pyo3::types::PyTuple>().map_err(|_| {
+                pyo3::exceptions::PyTypeError::new_err("Each call must be a (name, args) tuple")
+            })?;
             let name: String = tuple.get_item(0)?.extract()?;
             let args = tuple.get_item(1)?;
             calls_json.push((name, py_to_json(&args)?));
         }
 
-        let results = crate::run_async(self.inner.call_tools_parallel(calls_json)).map_err(to_py_err)?;
+        let results =
+            crate::run_async(self.inner.call_tools_parallel(calls_json)).map_err(to_py_err)?;
         Python::with_gil(|py| results.iter().map(|v| json_to_py(py, v)).collect())
     }
 
@@ -669,7 +733,10 @@ impl PyMCPClient {
     /// List available resources from the MCP server.
     fn list_resources(&self) -> PyResult<Vec<PyMCPResource>> {
         let resources = crate::run_async(self.inner.list_resources()).map_err(to_py_err)?;
-        Ok(resources.into_iter().map(|r| PyMCPResource { inner: r }).collect())
+        Ok(resources
+            .into_iter()
+            .map(|r| PyMCPResource { inner: r })
+            .collect())
     }
 
     /// Read the content of a resource by URI.
@@ -711,7 +778,10 @@ impl PyMCPClient {
             messages: result
                 .messages
                 .into_iter()
-                .map(|m| PyMCPPromptMessage { role: m.role, content: m.content })
+                .map(|m| PyMCPPromptMessage {
+                    role: m.role,
+                    content: m.content,
+                })
                 .collect(),
         })
     }
@@ -751,8 +821,7 @@ pub fn py_create_mcp_client(config: &PyMCPConfig) -> PyResult<PyMCPClient> {
 pub fn py_merge_tool_lists(clients: Vec<PyRef<'_, PyMCPClient>>) -> PyResult<Vec<PyMCPTool>> {
     let arcs: Vec<Arc<dyn MCPClient>> = clients.iter().map(|c| c.inner.clone()).collect();
     let tools =
-        crate::run_async(flowgentra_ai::core::mcp::merge_tool_lists(&arcs))
-        .map_err(to_py_err)?;
+        crate::run_async(flowgentra_ai::core::mcp::merge_tool_lists(&arcs)).map_err(to_py_err)?;
     Ok(tools.into_iter().map(|t| PyMCPTool { inner: t }).collect())
 }
 
@@ -768,10 +837,14 @@ pub struct PySSEMessage {
 #[pymethods]
 impl PySSEMessage {
     #[getter]
-    fn id(&self) -> &str { &self.inner.id }
+    fn id(&self) -> &str {
+        &self.inner.id
+    }
 
     #[getter]
-    fn event_type(&self) -> &str { &self.inner.event_type }
+    fn event_type(&self) -> &str {
+        &self.inner.event_type
+    }
 
     #[getter]
     fn data<'py>(&self, py: Python<'py>) -> PyResult<PyObject> {
@@ -779,10 +852,15 @@ impl PySSEMessage {
     }
 
     #[getter]
-    fn timestamp(&self) -> &str { &self.inner.timestamp }
+    fn timestamp(&self) -> &str {
+        &self.inner.timestamp
+    }
 
     fn __repr__(&self) -> String {
-        format!("SSEMessage(type='{}', id='{}')", self.inner.event_type, self.inner.id)
+        format!(
+            "SSEMessage(type='{}', id='{}')",
+            self.inner.event_type, self.inner.id
+        )
     }
 }
 
@@ -807,7 +885,9 @@ impl PySSEStreamReceiver {
         self.inner.as_ref().map(|s| s.id.as_str())
     }
 
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> { slf }
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
 
     fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyObject>> {
         let stream = match self.inner.as_mut() {
@@ -842,10 +922,15 @@ impl PySSEStreamReceiver {
         })?;
         let messages = crate::run_async(stream.collect_all())
             .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))?;
-        Ok(messages.into_iter().map(|m| PySSEMessage { inner: m }).collect())
+        Ok(messages
+            .into_iter()
+            .map(|m| PySSEMessage { inner: m })
+            .collect())
     }
 
-    fn __repr__(&self) -> &'static str { "SSEStreamReceiver()" }
+    fn __repr__(&self) -> &'static str {
+        "SSEStreamReceiver()"
+    }
 }
 
 // ─── PySSEConnection ───────────────────────────────────────────────────────
@@ -881,13 +966,19 @@ impl PySSEConnection {
     /// Args:
     ///     endpoint:     Relative endpoint path (e.g. "/events").
     ///     request_body: JSON-serializable dict to send as the POST body.
-    fn stream(&self, endpoint: &str, request_body: &Bound<'_, PyAny>) -> PyResult<PySSEStreamReceiver> {
+    fn stream(
+        &self,
+        endpoint: &str,
+        request_body: &Bound<'_, PyAny>,
+    ) -> PyResult<PySSEStreamReceiver> {
         let body = py_to_json(request_body)?;
         let inner = self.inner.clone();
         let ep = endpoint.to_string();
         let receiver = crate::run_async(async move { inner.stream(ep, body).await })
             .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))?;
-        Ok(PySSEStreamReceiver { inner: Some(receiver) })
+        Ok(PySSEStreamReceiver {
+            inner: Some(receiver),
+        })
     }
 
     /// Number of currently active SSE streams.
@@ -900,7 +991,9 @@ impl PySSEConnection {
         crate::run_async(self.inner.close_all());
     }
 
-    fn __repr__(&self) -> &'static str { "SSEConnection()" }
+    fn __repr__(&self) -> &'static str {
+        "SSEConnection()"
+    }
 }
 
 // ─── PyStdioConnection ─────────────────────────────────────────────────────
@@ -953,8 +1046,8 @@ impl PyStdioConnection {
         let params_json = py_to_json(params)?;
         let inner = self.inner.clone();
         let m = method.to_string();
-        let result = crate::run_async(async move { inner.call(m, params_json).await })
-            .map_err(to_py_err)?;
+        let result =
+            crate::run_async(async move { inner.call(m, params_json).await }).map_err(to_py_err)?;
         Python::with_gil(|py| json_to_py(py, &result))
     }
 
@@ -964,7 +1057,9 @@ impl PyStdioConnection {
         crate::run_async(async move { inner.is_running().await })
     }
 
-    fn __repr__(&self) -> &'static str { "StdioConnection()" }
+    fn __repr__(&self) -> &'static str {
+        "StdioConnection()"
+    }
 }
 
 // ─── PyStdioConnectionBuilder ─────────────────────────────────────────────
@@ -1043,7 +1138,9 @@ impl PyStdioConnectionBuilder {
         if !self.allowed_commands.is_empty() {
             conn = conn.with_allowed_commands(self.allowed_commands.clone());
         }
-        PyStdioConnection { inner: Arc::new(conn) }
+        PyStdioConnection {
+            inner: Arc::new(conn),
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -1112,13 +1209,21 @@ impl PyDockerConfig {
     }
 
     #[getter]
-    fn image(&self) -> &str { &self.inner.image }
+    fn image(&self) -> &str {
+        &self.inner.image
+    }
     #[getter]
-    fn container_name(&self) -> Option<&str> { self.inner.container_name.as_deref() }
+    fn container_name(&self) -> Option<&str> {
+        self.inner.container_name.as_deref()
+    }
     #[getter]
-    fn working_dir(&self) -> Option<&str> { self.inner.working_dir.as_deref() }
+    fn working_dir(&self) -> Option<&str> {
+        self.inner.working_dir.as_deref()
+    }
     #[getter]
-    fn network(&self) -> Option<&str> { self.inner.network.as_deref() }
+    fn network(&self) -> Option<&str> {
+        self.inner.network.as_deref()
+    }
 
     fn __repr__(&self) -> String {
         format!("DockerConfig(image='{}')", self.inner.image)
@@ -1134,7 +1239,9 @@ pub struct PyDockerConnection {
 #[pymethods]
 impl PyDockerConnection {
     #[getter]
-    fn image(&self) -> &str { &self.inner.config.image }
+    fn image(&self) -> &str {
+        &self.inner.config.image
+    }
 
     fn __repr__(&self) -> String {
         format!("DockerConnection(image='{}')", self.inner.config.image)
@@ -1151,12 +1258,18 @@ pub struct PyDockerConnectionBuilder {
 impl PyDockerConnectionBuilder {
     #[new]
     fn new(image: &str) -> Self {
-        PyDockerConnectionBuilder { image: image.to_string() }
+        PyDockerConnectionBuilder {
+            image: image.to_string(),
+        }
     }
 
     fn build(&self) -> PyDockerConnection {
-        PyDockerConnection { inner: DockerConnectionBuilder::new(&self.image).build() }
+        PyDockerConnection {
+            inner: DockerConnectionBuilder::new(&self.image).build(),
+        }
     }
 
-    fn __repr__(&self) -> &'static str { "DockerConnectionBuilder()" }
+    fn __repr__(&self) -> &'static str {
+        "DockerConnectionBuilder()"
+    }
 }

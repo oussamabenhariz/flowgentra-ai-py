@@ -1,14 +1,15 @@
 //! Python bindings for Routing Conditions DSL
 
-use pyo3::prelude::*;
 use crate::error::ValidationError;
+use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-use flowgentra_ai::core::graph::routing::{ComparisonOp, Condition, ConditionBuilder, FieldTypeCheck};
+use flowgentra_ai::core::graph::routing::{
+    ComparisonOp, Condition, ConditionBuilder, FieldTypeCheck,
+};
 
-
-use crate::py_to_json;
 use crate::graph::pydict_to_dynstate;
+use crate::py_to_json;
 
 // ─── PyComparisonOp ─────────────────────────────────────────────────────────
 
@@ -26,32 +27,44 @@ pub struct PyComparisonOp {
 impl PyComparisonOp {
     #[staticmethod]
     fn equal() -> Self {
-        PyComparisonOp { inner: ComparisonOp::Equal }
+        PyComparisonOp {
+            inner: ComparisonOp::Equal,
+        }
     }
 
     #[staticmethod]
     fn not_equal() -> Self {
-        PyComparisonOp { inner: ComparisonOp::NotEqual }
+        PyComparisonOp {
+            inner: ComparisonOp::NotEqual,
+        }
     }
 
     #[staticmethod]
     fn less_than() -> Self {
-        PyComparisonOp { inner: ComparisonOp::LessThan }
+        PyComparisonOp {
+            inner: ComparisonOp::LessThan,
+        }
     }
 
     #[staticmethod]
     fn less_or_equal() -> Self {
-        PyComparisonOp { inner: ComparisonOp::LessOrEqual }
+        PyComparisonOp {
+            inner: ComparisonOp::LessOrEqual,
+        }
     }
 
     #[staticmethod]
     fn greater_than() -> Self {
-        PyComparisonOp { inner: ComparisonOp::GreaterThan }
+        PyComparisonOp {
+            inner: ComparisonOp::GreaterThan,
+        }
     }
 
     #[staticmethod]
     fn greater_or_equal() -> Self {
-        PyComparisonOp { inner: ComparisonOp::GreaterOrEqual }
+        PyComparisonOp {
+            inner: ComparisonOp::GreaterOrEqual,
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -108,10 +121,12 @@ impl PyCondition {
             "array" | "list" => FieldTypeCheck::Array,
             "object" | "dict" => FieldTypeCheck::Object,
             "null" | "none" => FieldTypeCheck::Null,
-            _ => return Err(ValidationError::new_err(format!(
-                "Unknown type: '{}'. Use: string, number, boolean, array, object, null",
-                expected_type
-            ))),
+            _ => {
+                return Err(ValidationError::new_err(format!(
+                    "Unknown type: '{}'. Use: string, number, boolean, array, object, null",
+                    expected_type
+                )))
+            }
         };
         Ok(PyCondition {
             inner: Condition::field_type(field, ft),

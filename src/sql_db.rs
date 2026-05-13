@@ -33,7 +33,10 @@ use crate::{json_to_py, py_to_json, run_async};
 
 // ─── Row → Python dict ────────────────────────────────────────────────────────
 
-fn row_to_pydict(py: Python<'_>, row: std::collections::HashMap<String, Value>) -> PyResult<PyObject> {
+fn row_to_pydict(
+    py: Python<'_>,
+    row: std::collections::HashMap<String, Value>,
+) -> PyResult<PyObject> {
     let dict = PyDict::new_bound(py);
     for (k, v) in row {
         dict.set_item(k, json_to_py(py, &v)?)?;
@@ -79,17 +82,24 @@ impl PySqliteDatabase {
             use flowgentra_ai::core::db::sql::sqlite::SqliteDatabase;
             let db = run_async(SqliteDatabase::connect(url))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
-            Ok(Self { inner: Arc::new(db) })
+            Ok(Self {
+                inner: Arc::new(db),
+            })
         }
         #[cfg(not(feature = "sqlite"))]
         Err(crate::error::InternalError::new_err(
-            "SqliteDatabase requires the 'sqlite' feature. Recompile with --features sqlite"
+            "SqliteDatabase requires the 'sqlite' feature. Recompile with --features sqlite",
         ))
     }
 
     /// Run a SELECT query and return rows as a list of dicts.
     #[pyo3(signature = (sql, params = None))]
-    fn query(&self, py: Python<'_>, sql: &str, params: Option<&Bound<'_, PyList>>) -> PyResult<PyObject> {
+    fn query(
+        &self,
+        py: Python<'_>,
+        sql: &str,
+        params: Option<&Bound<'_, PyList>>,
+    ) -> PyResult<PyObject> {
         #[cfg(feature = "sqlite")]
         {
             use flowgentra_ai::core::db::sql::SqlDatabase;
@@ -103,7 +113,9 @@ impl PySqliteDatabase {
             Ok(list.into())
         }
         #[cfg(not(feature = "sqlite"))]
-        Err(crate::error::InternalError::new_err("sqlite feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "sqlite feature not enabled",
+        ))
     }
 
     /// Run an INSERT / UPDATE / DELETE / DDL statement. Returns rows affected.
@@ -117,10 +129,14 @@ impl PySqliteDatabase {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "sqlite"))]
-        Err(crate::error::InternalError::new_err("sqlite feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "sqlite feature not enabled",
+        ))
     }
 
-    fn __repr__(&self) -> String { "SqliteDatabase(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "SqliteDatabase(...)".to_string()
+    }
 }
 
 // ─── PostgresDatabase ─────────────────────────────────────────────────────────
@@ -146,14 +162,23 @@ impl PyPostgresDatabase {
             use flowgentra_ai::core::db::sql::postgres::PostgresDatabase;
             let db = run_async(PostgresDatabase::connect(url))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
-            Ok(Self { inner: Arc::new(db) })
+            Ok(Self {
+                inner: Arc::new(db),
+            })
         }
         #[cfg(not(feature = "postgres"))]
-        Err(crate::error::InternalError::new_err("postgres feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "postgres feature not enabled",
+        ))
     }
 
     #[pyo3(signature = (sql, params = None))]
-    fn query(&self, py: Python<'_>, sql: &str, params: Option<&Bound<'_, PyList>>) -> PyResult<PyObject> {
+    fn query(
+        &self,
+        py: Python<'_>,
+        sql: &str,
+        params: Option<&Bound<'_, PyList>>,
+    ) -> PyResult<PyObject> {
         #[cfg(feature = "postgres")]
         {
             use flowgentra_ai::core::db::sql::SqlDatabase;
@@ -161,11 +186,15 @@ impl PyPostgresDatabase {
             let rows = run_async(self.inner.query(sql, &p))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
             let list = PyList::empty_bound(py);
-            for row in rows { list.append(row_to_pydict(py, row)?)?; }
+            for row in rows {
+                list.append(row_to_pydict(py, row)?)?;
+            }
             Ok(list.into())
         }
         #[cfg(not(feature = "postgres"))]
-        Err(crate::error::InternalError::new_err("postgres feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "postgres feature not enabled",
+        ))
     }
 
     #[pyo3(signature = (sql, params = None))]
@@ -178,10 +207,14 @@ impl PyPostgresDatabase {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "postgres"))]
-        Err(crate::error::InternalError::new_err("postgres feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "postgres feature not enabled",
+        ))
     }
 
-    fn __repr__(&self) -> String { "PostgresDatabase(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "PostgresDatabase(...)".to_string()
+    }
 }
 
 // ─── MySqlDatabase ────────────────────────────────────────────────────────────
@@ -207,14 +240,23 @@ impl PyMySqlDatabase {
             use flowgentra_ai::core::db::sql::mysql::MySqlDatabase;
             let db = run_async(MySqlDatabase::connect(url))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
-            Ok(Self { inner: Arc::new(db) })
+            Ok(Self {
+                inner: Arc::new(db),
+            })
         }
         #[cfg(not(feature = "mysql"))]
-        Err(crate::error::InternalError::new_err("mysql feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "mysql feature not enabled",
+        ))
     }
 
     #[pyo3(signature = (sql, params = None))]
-    fn query(&self, py: Python<'_>, sql: &str, params: Option<&Bound<'_, PyList>>) -> PyResult<PyObject> {
+    fn query(
+        &self,
+        py: Python<'_>,
+        sql: &str,
+        params: Option<&Bound<'_, PyList>>,
+    ) -> PyResult<PyObject> {
         #[cfg(feature = "mysql")]
         {
             use flowgentra_ai::core::db::sql::SqlDatabase;
@@ -222,11 +264,15 @@ impl PyMySqlDatabase {
             let rows = run_async(self.inner.query(sql, &p))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
             let list = PyList::empty_bound(py);
-            for row in rows { list.append(row_to_pydict(py, row)?)?; }
+            for row in rows {
+                list.append(row_to_pydict(py, row)?)?;
+            }
             Ok(list.into())
         }
         #[cfg(not(feature = "mysql"))]
-        Err(crate::error::InternalError::new_err("mysql feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "mysql feature not enabled",
+        ))
     }
 
     #[pyo3(signature = (sql, params = None))]
@@ -239,10 +285,14 @@ impl PyMySqlDatabase {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "mysql"))]
-        Err(crate::error::InternalError::new_err("mysql feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "mysql feature not enabled",
+        ))
     }
 
-    fn __repr__(&self) -> String { "MySqlDatabase(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "MySqlDatabase(...)".to_string()
+    }
 }
 
 // ─── MssqlDatabase ────────────────────────────────────────────────────────────
@@ -276,14 +326,23 @@ impl PyMssqlDatabase {
             use flowgentra_ai::core::db::sql::mssql::MssqlDatabase;
             let db = run_async(MssqlDatabase::connect(url))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
-            Ok(Self { inner: Arc::new(db) })
+            Ok(Self {
+                inner: Arc::new(db),
+            })
         }
         #[cfg(not(feature = "mssql"))]
-        Err(crate::error::InternalError::new_err("mssql feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "mssql feature not enabled",
+        ))
     }
 
     #[pyo3(signature = (sql, params = None))]
-    fn query(&self, py: Python<'_>, sql: &str, params: Option<&Bound<'_, PyList>>) -> PyResult<PyObject> {
+    fn query(
+        &self,
+        py: Python<'_>,
+        sql: &str,
+        params: Option<&Bound<'_, PyList>>,
+    ) -> PyResult<PyObject> {
         #[cfg(feature = "mssql")]
         {
             use flowgentra_ai::core::db::sql::SqlDatabase;
@@ -291,11 +350,15 @@ impl PyMssqlDatabase {
             let rows = run_async(self.inner.query(sql, &p))
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
             let list = PyList::empty_bound(py);
-            for row in rows { list.append(row_to_pydict(py, row)?)?; }
+            for row in rows {
+                list.append(row_to_pydict(py, row)?)?;
+            }
             Ok(list.into())
         }
         #[cfg(not(feature = "mssql"))]
-        Err(crate::error::InternalError::new_err("mssql feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "mssql feature not enabled",
+        ))
     }
 
     #[pyo3(signature = (sql, params = None))]
@@ -308,10 +371,14 @@ impl PyMssqlDatabase {
                 .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
         }
         #[cfg(not(feature = "mssql"))]
-        Err(crate::error::InternalError::new_err("mssql feature not enabled"))
+        Err(crate::error::InternalError::new_err(
+            "mssql feature not enabled",
+        ))
     }
 
-    fn __repr__(&self) -> String { "MssqlDatabase(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "MssqlDatabase(...)".to_string()
+    }
 }
 
 // ─── BigQueryDatabase ─────────────────────────────────────────────────────────
@@ -342,23 +409,32 @@ impl PyBigQueryDatabase {
     ///     access_token:  OAuth2 Bearer token (``gcloud auth print-access-token``).
     #[new]
     fn new(project_id: &str, dataset_id: &str, access_token: &str) -> PyResult<Self> {
-        use flowgentra_ai::core::db::sql::bigquery::{BigQueryDatabase, BigQueryConfig};
+        use flowgentra_ai::core::db::sql::bigquery::{BigQueryConfig, BigQueryDatabase};
         let db = BigQueryDatabase::new(BigQueryConfig {
             project_id: project_id.to_string(),
             dataset_id: dataset_id.to_string(),
             access_token: access_token.to_string(),
         });
-        Ok(Self { inner: Arc::new(db) })
+        Ok(Self {
+            inner: Arc::new(db),
+        })
     }
 
     #[pyo3(signature = (sql, params = None))]
-    fn query(&self, py: Python<'_>, sql: &str, params: Option<&Bound<'_, PyList>>) -> PyResult<PyObject> {
+    fn query(
+        &self,
+        py: Python<'_>,
+        sql: &str,
+        params: Option<&Bound<'_, PyList>>,
+    ) -> PyResult<PyObject> {
         use flowgentra_ai::core::db::sql::SqlDatabase;
         let p = pylist_to_params(params)?;
         let rows = run_async(self.inner.query(sql, &p))
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
         let list = PyList::empty_bound(py);
-        for row in rows { list.append(row_to_pydict(py, row)?)?; }
+        for row in rows {
+            list.append(row_to_pydict(py, row)?)?;
+        }
         Ok(list.into())
     }
 
@@ -370,7 +446,9 @@ impl PyBigQueryDatabase {
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
     }
 
-    fn __repr__(&self) -> String { "BigQueryDatabase(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "BigQueryDatabase(...)".to_string()
+    }
 }
 
 // ─── DatabricksDatabase ───────────────────────────────────────────────────────
@@ -412,7 +490,7 @@ impl PyDatabricksDatabase {
         catalog: Option<String>,
         schema: Option<String>,
     ) -> PyResult<Self> {
-        use flowgentra_ai::core::db::sql::databricks::{DatabricksDatabase, DatabricksConfig};
+        use flowgentra_ai::core::db::sql::databricks::{DatabricksConfig, DatabricksDatabase};
         let db = DatabricksDatabase::new(DatabricksConfig {
             host: host.to_string(),
             warehouse_id: warehouse_id.to_string(),
@@ -420,17 +498,26 @@ impl PyDatabricksDatabase {
             catalog,
             schema,
         });
-        Ok(Self { inner: Arc::new(db) })
+        Ok(Self {
+            inner: Arc::new(db),
+        })
     }
 
     #[pyo3(signature = (sql, params = None))]
-    fn query(&self, py: Python<'_>, sql: &str, params: Option<&Bound<'_, PyList>>) -> PyResult<PyObject> {
+    fn query(
+        &self,
+        py: Python<'_>,
+        sql: &str,
+        params: Option<&Bound<'_, PyList>>,
+    ) -> PyResult<PyObject> {
         use flowgentra_ai::core::db::sql::SqlDatabase;
         let p = pylist_to_params(params)?;
         let rows = run_async(self.inner.query(sql, &p))
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
         let list = PyList::empty_bound(py);
-        for row in rows { list.append(row_to_pydict(py, row)?)?; }
+        for row in rows {
+            list.append(row_to_pydict(py, row)?)?;
+        }
         Ok(list.into())
     }
 
@@ -442,5 +529,7 @@ impl PyDatabricksDatabase {
             .map_err(|e| crate::error::InternalError::new_err(e.to_string()))
     }
 
-    fn __repr__(&self) -> String { "DatabricksDatabase(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "DatabricksDatabase(...)".to_string()
+    }
 }

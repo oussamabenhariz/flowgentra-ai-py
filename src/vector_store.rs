@@ -5,15 +5,14 @@ use pyo3::types::PyDict;
 use std::sync::Arc;
 
 use flowgentra_ai::core::rag::{
-    Embeddings, FilterExpr, InMemoryVectorStore, Retriever, RetrievalConfig, RetrieverStrategy,
-    VectorStoreBackend,
-    OpenAIEmbeddings, HuggingFaceEmbeddings, OllamaEmbeddings, MistralEmbeddings,
-    CachedEmbeddings,
+    CachedEmbeddings, Embeddings, FilterExpr, HuggingFaceEmbeddings, InMemoryVectorStore,
+    MistralEmbeddings, OllamaEmbeddings, OpenAIEmbeddings, RetrievalConfig, Retriever,
+    RetrieverStrategy, VectorStoreBackend,
 };
 
 use crate::error::to_py_err_generic;
-use crate::rag::{PyDocument, PySearchResult};
 use crate::py_to_json;
+use crate::rag::{PyDocument, PySearchResult};
 
 // ─── PyEmbeddings ───────────────────────────────────────────────────────────
 
@@ -89,7 +88,7 @@ impl PyEmbeddings {
             "openai" => {
                 let key = api_key.ok_or_else(|| {
                     crate::error::ConfigurationError::new_err(
-                        "api_key is required for OpenAI embeddings"
+                        "api_key is required for OpenAI embeddings",
                     )
                 })?;
 
@@ -111,7 +110,7 @@ impl PyEmbeddings {
             "mistral" => {
                 let key = api_key.ok_or_else(|| {
                     crate::error::ConfigurationError::new_err(
-                        "api_key is required for Mistral embeddings"
+                        "api_key is required for Mistral embeddings",
                     )
                 })?;
 
@@ -188,7 +187,12 @@ impl PyEmbeddings {
     /// Create HuggingFace embeddings.
     #[staticmethod]
     #[pyo3(signature = (model, api_key, endpoint=None, dimension=None))]
-    fn huggingface(model: &str, api_key: &str, endpoint: Option<&str>, dimension: Option<usize>) -> Self {
+    fn huggingface(
+        model: &str,
+        api_key: &str,
+        endpoint: Option<&str>,
+        dimension: Option<usize>,
+    ) -> Self {
         let mut provider = HuggingFaceEmbeddings::new(model, api_key);
         if let Some(ep) = endpoint {
             provider = provider.with_endpoint(ep);
@@ -318,9 +322,10 @@ impl PyInMemoryVectorStore {
                     }
                     "ollama" => {
                         // Default Ollama setup
-                        Arc::new(Embeddings::new(Arc::new(
-                            OllamaEmbeddings::new("nomic-embed-text", None),
-                        )))
+                        Arc::new(Embeddings::new(Arc::new(OllamaEmbeddings::new(
+                            "nomic-embed-text",
+                            None,
+                        ))))
                     }
                     _ => Arc::new(Embeddings::mock(128)), // Default to mock
                 };
@@ -363,16 +368,14 @@ impl PyInMemoryVectorStore {
     /// Add a single document (legacy API, kept for compatibility).
     /// For batch operations, use the constructor with documents parameter.
     fn add(&self, doc: &PyDocument) -> PyResult<()> {
-        crate::run_async(self.inner.index(doc.inner.clone()))
-            .map_err(to_py_err_generic)
+        crate::run_async(self.inner.index(doc.inner.clone())).map_err(to_py_err_generic)
     }
 
     /// Index a document with its embedding.
     fn index(&self, doc: &PyDocument, embedding: Vec<f32>) -> PyResult<()> {
         let mut document = doc.inner.clone();
         document.embedding = Some(embedding);
-        crate::run_async(self.inner.index(document))
-            .map_err(to_py_err_generic)
+        crate::run_async(self.inner.index(document)).map_err(to_py_err_generic)
     }
 
     /// Search for similar documents by embedding vector.
@@ -393,14 +396,17 @@ impl PyInMemoryVectorStore {
                     let val = py_to_json(&v)?;
                     exprs.push(FilterExpr::Eq(key, val));
                 }
-                Some(if exprs.len() == 1 { exprs.remove(0) } else { FilterExpr::And(exprs) })
+                Some(if exprs.len() == 1 {
+                    exprs.remove(0)
+                } else {
+                    FilterExpr::And(exprs)
+                })
             }
         } else {
             None
         };
 
-        let results = 
-            crate::run_async(self.inner.search(query_embedding, top_k, metadata_filter))
+        let results = crate::run_async(self.inner.search(query_embedding, top_k, metadata_filter))
             .map_err(to_py_err_generic)?;
 
         Ok(results
@@ -457,17 +463,29 @@ impl PyInMemoryVectorStore {
                     let val = py_to_json(&v)?;
                     exprs.push(FilterExpr::Eq(key, val));
                 }
-                Some(if exprs.len() == 1 { exprs.remove(0) } else { FilterExpr::And(exprs) })
+                Some(if exprs.len() == 1 {
+                    exprs.remove(0)
+                } else {
+                    FilterExpr::And(exprs)
+                })
             }
         } else {
             None
         };
-        let all_results =
-            crate::run_async(self.inner.search_batch(query_embeddings, top_k, metadata_filter))
-                .map_err(to_py_err_generic)?;
+        let all_results = crate::run_async(self.inner.search_batch(
+            query_embeddings,
+            top_k,
+            metadata_filter,
+        ))
+        .map_err(to_py_err_generic)?;
         Ok(all_results
             .into_iter()
-            .map(|batch| batch.into_iter().map(|r| PySearchResult { inner: r }).collect())
+            .map(|batch| {
+                batch
+                    .into_iter()
+                    .map(|r| PySearchResult { inner: r })
+                    .collect()
+            })
             .collect())
     }
 
@@ -615,9 +633,7 @@ impl PyRetriever {
 
     /// Execute the full retrieval pipeline for a query.
     fn retrieve(&self, query: &str) -> PyResult<Vec<PySearchResult>> {
-        let results = 
-            crate::run_async(self.inner.retrieve(query))
-            .map_err(to_py_err_generic)?;
+        let results = crate::run_async(self.inner.retrieve(query)).map_err(to_py_err_generic)?;
         Ok(results
             .into_iter()
             .map(|r| PySearchResult { inner: r })

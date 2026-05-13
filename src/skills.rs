@@ -11,8 +11,8 @@ use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use flowgentra_ai::core::skills::{Skill, SkillRegistry};
 use crate::error::to_py_err;
+use flowgentra_ai::core::skills::{Skill, SkillRegistry};
 
 // ── PySkill ────────────────────────────────────────────────────────────────────
 
@@ -25,16 +25,40 @@ pub struct PySkill {
 
 #[pymethods]
 impl PySkill {
-    #[getter] fn name(&self) -> &str { &self.inner.name }
-    #[getter] fn description(&self) -> &str { &self.inner.description }
-    #[getter] fn version(&self) -> Option<&str> { self.inner.version.as_deref() }
-    #[getter] fn license(&self) -> Option<&str> { self.inner.license.as_deref() }
-    #[getter] fn instructions(&self) -> &str { &self.inner.instructions }
-    #[getter] fn allowed_tools(&self) -> Vec<String> { self.inner.allowed_tools.clone() }
-    #[getter] fn references(&self) -> Vec<String> { self.inner.references.clone() }
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.name
+    }
+    #[getter]
+    fn description(&self) -> &str {
+        &self.inner.description
+    }
+    #[getter]
+    fn version(&self) -> Option<&str> {
+        self.inner.version.as_deref()
+    }
+    #[getter]
+    fn license(&self) -> Option<&str> {
+        self.inner.license.as_deref()
+    }
+    #[getter]
+    fn instructions(&self) -> &str {
+        &self.inner.instructions
+    }
+    #[getter]
+    fn allowed_tools(&self) -> Vec<String> {
+        self.inner.allowed_tools.clone()
+    }
+    #[getter]
+    fn references(&self) -> Vec<String> {
+        self.inner.references.clone()
+    }
 
     fn __repr__(&self) -> String {
-        format!("Skill(name='{}', allowed_tools={:?})", self.inner.name, self.inner.allowed_tools)
+        format!(
+            "Skill(name='{}', allowed_tools={:?})",
+            self.inner.name, self.inner.allowed_tools
+        )
     }
 }
 
@@ -62,7 +86,6 @@ pub struct PySkillRegistry {
 
 #[pymethods]
 impl PySkillRegistry {
-
     /// Create an empty registry.
     ///
     /// Args:
@@ -99,9 +122,9 @@ impl PySkillRegistry {
         let skills_dir = PathBuf::from(path);
 
         if !skills_dir.exists() {
-            return Err(pyo3::exceptions::PyFileNotFoundError::new_err(
-                format!("Skills directory not found: {path}"),
-            ));
+            return Err(pyo3::exceptions::PyFileNotFoundError::new_err(format!(
+                "Skills directory not found: {path}"
+            )));
         }
 
         let mut entries: Vec<PathBuf> = std::fs::read_dir(&skills_dir)
@@ -139,9 +162,9 @@ impl PySkillRegistry {
         let skill_md_path = skill_dir.join("SKILL.md");
 
         if !skill_md_path.exists() {
-            return Err(pyo3::exceptions::PyFileNotFoundError::new_err(
-                format!("No SKILL.md found in {path}"),
-            ));
+            return Err(pyo3::exceptions::PyFileNotFoundError::new_err(format!(
+                "No SKILL.md found in {path}"
+            )));
         }
 
         let content = std::fs::read_to_string(&skill_md_path)
@@ -154,8 +177,8 @@ impl PySkillRegistry {
             .and_then(|n| n.to_str())
             .unwrap_or("unknown");
 
-        let skill = SkillRegistry::build_skill(&content, dir_name, references)
-            .map_err(to_py_err)?;
+        let skill =
+            SkillRegistry::build_skill(&content, dir_name, references).map_err(to_py_err)?;
 
         // Discover @tool decorated callables from scripts/
         let scripts_dir = skill_dir.join("scripts");
@@ -176,7 +199,9 @@ impl PySkillRegistry {
         // Store skill-specific callables
         self.skill_tools.extend(discovered);
 
-        self.inner.register(skill, allow_override).map_err(to_py_err)
+        self.inner
+            .register(skill, allow_override)
+            .map_err(to_py_err)
     }
 
     // ── Read ──────────────────────────────────────────────────────────────────
@@ -197,8 +222,12 @@ impl PySkillRegistry {
             })
     }
 
-    fn __contains__(&self, name: &str) -> bool { self.inner.contains(name) }
-    fn __len__(&self) -> usize { self.inner.len() }
+    fn __contains__(&self, name: &str) -> bool {
+        self.inner.contains(name)
+    }
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
 
     fn __repr__(&self) -> String {
         format!("SkillRegistry(skills={:?})", self.inner.list())
@@ -221,7 +250,9 @@ impl PySkillRegistry {
     /// Injects the skill's full instruction body and any reference content.
     #[pyo3(signature = (skill_name=None))]
     fn build_system_prompt(&self, skill_name: Option<&str>) -> PyResult<String> {
-        self.inner.build_system_prompt(skill_name).map_err(to_py_err)
+        self.inner
+            .build_system_prompt(skill_name)
+            .map_err(to_py_err)
     }
 
     /// Return ``ToolSpec`` objects for a skill's ``allowed-tools``.
@@ -247,12 +278,9 @@ impl PySkillRegistry {
                 // Skill-specific @tool callable — build ToolSpec from its metadata
                 let name: String = callable.getattr(py, "_tool_name")?.extract(py)?;
                 let desc: String = callable.getattr(py, "_tool_description")?.extract(py)?;
-                let params: HashMap<String, String> = callable
-                    .getattr(py, "_tool_parameters")?
-                    .extract(py)?;
-                let required: Vec<String> = callable
-                    .getattr(py, "_tool_required")?
-                    .extract(py)?;
+                let params: HashMap<String, String> =
+                    callable.getattr(py, "_tool_parameters")?.extract(py)?;
+                let required: Vec<String> = callable.getattr(py, "_tool_required")?.extract(py)?;
 
                 let spec = tool_spec_cls.call1((&name, &desc))?;
                 for (param_name, param_type) in &params {
@@ -262,12 +290,9 @@ impl PySkillRegistry {
                     spec.call_method1("set_required", (req,))?;
                 }
                 specs.append(spec)?;
-
             } else if let Some(ref tr) = self.tool_registry {
                 // Global ToolRegistry tool (built-in or shared custom)
-                let has: bool = tr
-                    .call_method1(py, "has", (tool_name,))?
-                    .extract(py)?;
+                let has: bool = tr.call_method1(py, "has", (tool_name,))?.extract(py)?;
                 if has {
                     let defn: PyObject = tr.call_method1(py, "get", (tool_name,))?;
                     let name: String = defn
@@ -339,7 +364,10 @@ fn load_references(skill_dir: &Path) -> Vec<String> {
 /// Looks for functions with ``_is_tool = True`` — set by ``@tool`` from
 /// ``flowgentra_ai.tools``. This must stay in Python-land because it uses
 /// importlib to execute .py files and inspect Python function attributes.
-fn discover_script_tools(py: Python<'_>, scripts_dir: &Path) -> PyResult<HashMap<String, PyObject>> {
+fn discover_script_tools(
+    py: Python<'_>,
+    scripts_dir: &Path,
+) -> PyResult<HashMap<String, PyObject>> {
     let mut tools: HashMap<String, PyObject> = HashMap::new();
     if !scripts_dir.exists() {
         return Ok(tools);
@@ -348,7 +376,7 @@ fn discover_script_tools(py: Python<'_>, scripts_dir: &Path) -> PyResult<HashMap
     let mut py_files: Vec<PathBuf> = std::fs::read_dir(scripts_dir)
         .map_err(|e| pyo3::exceptions::PyIOError::new_err(e.to_string()))?
         .filter_map(|e| e.ok().map(|d| d.path()))
-        .filter(|p| p.extension().map_or(false, |ext| ext == "py"))
+        .filter(|p| p.extension().is_some_and(|ext| ext == "py"))
         .collect();
     py_files.sort();
 
@@ -363,19 +391,18 @@ fn discover_script_tools(py: Python<'_>, scripts_dir: &Path) -> PyResult<HashMap
             .unwrap_or("_skill_script");
         let module_name = format!("_flowgentra_skill_{stem}");
 
-        let spec = importlib_util
-            .call_method1("spec_from_file_location", (&module_name, file_str))?;
+        let spec =
+            importlib_util.call_method1("spec_from_file_location", (&module_name, file_str))?;
         if spec.is_none() {
             continue;
         }
 
         let module = importlib_util.call_method1("module_from_spec", (&spec,))?;
-        spec.getattr("loader")?.call_method1("exec_module", (&module,))?;
+        spec.getattr("loader")?
+            .call_method1("exec_module", (&module,))?;
 
-        let members = inspect.call_method1(
-            "getmembers",
-            (&module, inspect.getattr("isfunction")?),
-        )?;
+        let members =
+            inspect.call_method1("getmembers", (&module, inspect.getattr("isfunction")?))?;
 
         for item in members.iter()? {
             let item = item?;

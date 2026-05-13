@@ -23,7 +23,9 @@ macro_rules! impl_tool {
                     .map_err(|e| crate::error::ToolExecutionError::new_err(e.to_string()))?;
                 json_to_py(py, &val)
             }
-            fn __repr__(&self) -> String { $repr.to_string() }
+            fn __repr__(&self) -> String {
+                $repr.to_string()
+            }
         }
     };
 }
@@ -72,7 +74,9 @@ impl PyNodeJsReplTool {
     #[new]
     #[pyo3(signature = (timeout_secs=None))]
     fn new(timeout_secs: Option<u64>) -> Self {
-        Self { inner: Arc::new(NodeJsReplTool::new(timeout_secs.unwrap_or(30))) }
+        Self {
+            inner: Arc::new(NodeJsReplTool::new(timeout_secs.unwrap_or(30))),
+        }
     }
 }
 impl_tool!(PyNodeJsReplTool, "NodeJsReplTool()");
@@ -111,7 +115,9 @@ impl PyShellTool {
             Some(cmds) => ShellTool::new(cmds, secs),
             None => ShellTool::unrestricted(secs),
         };
-        Self { inner: Arc::new(tool) }
+        Self {
+            inner: Arc::new(tool),
+        }
     }
 
     /// Create an unrestricted shell tool that passes commands to ``sh -c``.
@@ -123,7 +129,9 @@ impl PyShellTool {
     #[staticmethod]
     #[pyo3(signature = (timeout_secs=None))]
     fn unrestricted(timeout_secs: Option<u64>) -> Self {
-        Self { inner: Arc::new(ShellTool::unrestricted(timeout_secs.unwrap_or(30))) }
+        Self {
+            inner: Arc::new(ShellTool::unrestricted(timeout_secs.unwrap_or(30))),
+        }
     }
 }
 impl_tool!(PyShellTool, "ShellTool()");

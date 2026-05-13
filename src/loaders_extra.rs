@@ -34,7 +34,9 @@ fn to_py_err(e: impl std::fmt::Display) -> PyErr {
 }
 
 fn to_py_loaded(docs: Vec<LoadedDocument>) -> Vec<PyLoadedDocument> {
-    docs.into_iter().map(|d| PyLoadedDocument { inner: d }).collect()
+    docs.into_iter()
+        .map(|d| PyLoadedDocument { inner: d })
+        .collect()
 }
 
 // ── PyCsvLoader ───────────────────────────────────────────────────────────────
@@ -71,7 +73,9 @@ impl PyCsvLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { "CsvLoader(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "CsvLoader(...)".to_string()
+    }
 }
 
 // ── PyWebLoader ───────────────────────────────────────────────────────────────
@@ -97,11 +101,17 @@ impl PyWebLoader {
     #[new]
     #[pyo3(signature = (timeout_secs=30, user_agent=None, decode_entities=true))]
     fn new(timeout_secs: u64, user_agent: Option<String>, decode_entities: bool) -> Self {
-        let mut config = WebLoaderConfig::default();
-        config.timeout_secs = timeout_secs;
-        config.decode_entities = decode_entities;
-        if let Some(ua) = user_agent { config.user_agent = ua; }
-        Self { inner: WebLoader::with_config(config) }
+        let mut config = WebLoaderConfig {
+            timeout_secs,
+            decode_entities,
+            ..WebLoaderConfig::default()
+        };
+        if let Some(ua) = user_agent {
+            config.user_agent = ua;
+        }
+        Self {
+            inner: WebLoader::with_config(config),
+        }
     }
 
     /// Load a single URL. Returns a single ``LoadedDocument``.
@@ -120,7 +130,9 @@ impl PyWebLoader {
             .collect()
     }
 
-    fn __repr__(&self) -> String { "WebLoader(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "WebLoader(...)".to_string()
+    }
 }
 
 // ── PyJsonLoader ──────────────────────────────────────────────────────────────
@@ -142,7 +154,9 @@ impl PyJsonLoader {
     #[new]
     #[pyo3(signature = (text_field="text"))]
     fn new(text_field: &str) -> Self {
-        Self { inner: JsonLoader::new(text_field) }
+        Self {
+            inner: JsonLoader::new(text_field),
+        }
     }
 
     /// Load documents from ``path``.
@@ -152,7 +166,9 @@ impl PyJsonLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { "JsonLoader(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "JsonLoader(...)".to_string()
+    }
 }
 
 // ── PyJsonlLoader ─────────────────────────────────────────────────────────────
@@ -174,7 +190,9 @@ impl PyJsonlLoader {
     #[new]
     #[pyo3(signature = (text_field="text"))]
     fn new(text_field: &str) -> Self {
-        Self { inner: JsonlLoader::new(text_field) }
+        Self {
+            inner: JsonlLoader::new(text_field),
+        }
     }
 
     fn load(&self, path: &str) -> PyResult<Vec<PyLoadedDocument>> {
@@ -183,7 +201,9 @@ impl PyJsonlLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { "JsonlLoader(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "JsonlLoader(...)".to_string()
+    }
 }
 
 // ── PyDocxLoader ──────────────────────────────────────────────────────────────
@@ -199,7 +219,9 @@ pub struct PyDocxLoader;
 #[pymethods]
 impl PyDocxLoader {
     #[new]
-    fn new() -> Self { Self }
+    fn new() -> Self {
+        Self
+    }
 
     /// Load a single ``.docx`` file. Returns a ``LoadedDocument``.
     fn load(&self, path: &str) -> PyResult<PyLoadedDocument> {
@@ -209,7 +231,9 @@ impl PyDocxLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { "DocxLoader()".to_string() }
+    fn __repr__(&self) -> String {
+        "DocxLoader()".to_string()
+    }
 }
 
 // ── PyEpubLoader ──────────────────────────────────────────────────────────────
@@ -230,7 +254,9 @@ impl PyEpubLoader {
     ///     path: Path to the ``.epub`` file.
     #[new]
     fn new(path: &str) -> Self {
-        Self { path: path.to_string() }
+        Self {
+            path: path.to_string(),
+        }
     }
 
     /// Load all chapters.
@@ -239,7 +265,9 @@ impl PyEpubLoader {
         loader.load().map(to_py_loaded).map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("EpubLoader('{}')", self.path) }
+    fn __repr__(&self) -> String {
+        format!("EpubLoader('{}')", self.path)
+    }
 }
 
 // ── PyExcelLoader ─────────────────────────────────────────────────────────────
@@ -260,7 +288,9 @@ impl PyExcelLoader {
     ///     path: Path to the ``.xlsx`` file.
     #[new]
     fn new(path: &str) -> Self {
-        Self { path: path.to_string() }
+        Self {
+            path: path.to_string(),
+        }
     }
 
     fn load(&self) -> PyResult<Vec<PyLoadedDocument>> {
@@ -268,7 +298,9 @@ impl PyExcelLoader {
         loader.load().map(to_py_loaded).map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("ExcelLoader('{}')", self.path) }
+    fn __repr__(&self) -> String {
+        format!("ExcelLoader('{}')", self.path)
+    }
 }
 
 // ── PyDirectoryLoader ─────────────────────────────────────────────────────────
@@ -304,10 +336,15 @@ impl PyDirectoryLoader {
         skip_errors: bool,
     ) -> Self {
         let mut config = DirectoryLoaderConfig::default();
-        if let Some(exts) = extensions { config.extensions = exts; }
+        if let Some(exts) = extensions {
+            config.extensions = exts;
+        }
         config.recursive = recursive;
         config.skip_errors = skip_errors;
-        Self { root: root.to_string(), config }
+        Self {
+            root: root.to_string(),
+            config,
+        }
     }
 
     /// Load all matching documents.
@@ -318,7 +355,9 @@ impl PyDirectoryLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("DirectoryLoader('{}')", self.root) }
+    fn __repr__(&self) -> String {
+        format!("DirectoryLoader('{}')", self.root)
+    }
 }
 
 // ── PySitemapLoader ───────────────────────────────────────────────────────────
@@ -343,7 +382,10 @@ impl PySitemapLoader {
     #[new]
     #[pyo3(signature = (sitemap_url, max_pages=100))]
     fn new(sitemap_url: &str, max_pages: usize) -> Self {
-        Self { url: sitemap_url.to_string(), max_pages }
+        Self {
+            url: sitemap_url.to_string(),
+            max_pages,
+        }
     }
 
     fn load(&self) -> PyResult<Vec<PyLoadedDocument>> {
@@ -356,7 +398,9 @@ impl PySitemapLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("SitemapLoader('{}')", self.url) }
+    fn __repr__(&self) -> String {
+        format!("SitemapLoader('{}')", self.url)
+    }
 }
 
 // ── PyRecursiveUrlLoader ──────────────────────────────────────────────────────
@@ -382,22 +426,27 @@ impl PyRecursiveUrlLoader {
     #[new]
     #[pyo3(signature = (root_url, max_depth=2, max_pages=50))]
     fn new(root_url: &str, max_depth: usize, max_pages: usize) -> Self {
-        Self { root_url: root_url.to_string(), max_depth, max_pages }
+        Self {
+            root_url: root_url.to_string(),
+            max_depth,
+            max_pages,
+        }
     }
 
     fn load(&self) -> PyResult<Vec<PyLoadedDocument>> {
-        let loader = RecursiveUrlLoader::new(&self.root_url)
-            .with_config(RecursiveUrlConfig {
-                max_depth: self.max_depth,
-                max_pages: self.max_pages,
-                ..Default::default()
-            });
+        let loader = RecursiveUrlLoader::new(&self.root_url).with_config(RecursiveUrlConfig {
+            max_depth: self.max_depth,
+            max_pages: self.max_pages,
+            ..Default::default()
+        });
         run_async(async move { loader.load().await })
             .map(to_py_loaded)
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("RecursiveUrlLoader('{}')", self.root_url) }
+    fn __repr__(&self) -> String {
+        format!("RecursiveUrlLoader('{}')", self.root_url)
+    }
 }
 
 // ── PyWikipediaLoader ─────────────────────────────────────────────────────────
@@ -421,7 +470,10 @@ impl PyWikipediaLoader {
     #[new]
     #[pyo3(signature = (top_k=3, lang="en"))]
     fn new(top_k: usize, lang: &str) -> Self {
-        Self { top_k, lang: lang.to_string() }
+        Self {
+            top_k,
+            lang: lang.to_string(),
+        }
     }
 
     /// Fetch Wikipedia articles for ``query``.
@@ -433,7 +485,9 @@ impl PyWikipediaLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("WikipediaLoader(top_k={})", self.top_k) }
+    fn __repr__(&self) -> String {
+        format!("WikipediaLoader(top_k={})", self.top_k)
+    }
 }
 
 // ── PyArxivLoader ─────────────────────────────────────────────────────────────
@@ -467,7 +521,9 @@ impl PyArxivLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("ArxivLoader(max_results={})", self.max_results) }
+    fn __repr__(&self) -> String {
+        format!("ArxivLoader(max_results={})", self.max_results)
+    }
 }
 
 // ── PyRssFeedLoader ───────────────────────────────────────────────────────────
@@ -488,7 +544,9 @@ impl PyRssFeedLoader {
     ///     feed_url: URL of the RSS or Atom feed.
     #[new]
     fn new(feed_url: &str) -> Self {
-        Self { feed_url: feed_url.to_string() }
+        Self {
+            feed_url: feed_url.to_string(),
+        }
     }
 
     fn load(&self) -> PyResult<Vec<PyLoadedDocument>> {
@@ -498,7 +556,9 @@ impl PyRssFeedLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("RssFeedLoader('{}')", self.feed_url) }
+    fn __repr__(&self) -> String {
+        format!("RssFeedLoader('{}')", self.feed_url)
+    }
 }
 
 // ── PyYouTubeLoader ───────────────────────────────────────────────────────────
@@ -523,7 +583,9 @@ impl PyYouTubeLoader {
     ///     api_key: YouTube Data API v3 key.
     #[new]
     fn new(api_key: &str) -> Self {
-        Self { api_key: api_key.to_string() }
+        Self {
+            api_key: api_key.to_string(),
+        }
     }
 
     /// Search YouTube and load video metadata.
@@ -545,7 +607,9 @@ impl PyYouTubeLoader {
             .map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { "YouTubeLoader(...)".to_string() }
+    fn __repr__(&self) -> String {
+        "YouTubeLoader(...)".to_string()
+    }
 }
 
 // ── PyS3Loader ────────────────────────────────────────────────────────────────
@@ -597,7 +661,12 @@ impl PyS3Loader {
     }
 
     fn load(&self) -> PyResult<Vec<PyLoadedDocument>> {
-        let mut loader = S3Loader::new(&self.bucket, &self.region, &self.access_key, &self.secret_key);
+        let mut loader = S3Loader::new(
+            &self.bucket,
+            &self.region,
+            &self.access_key,
+            &self.secret_key,
+        );
         if let Some(p) = &self.prefix {
             loader = loader.with_prefix(p);
         }
@@ -639,7 +708,10 @@ impl PyDataFrameLoader {
         rows: Vec<std::collections::HashMap<String, String>>,
         page_content_column: &str,
     ) -> Self {
-        Self { rows, page_content_column: page_content_column.to_string() }
+        Self {
+            rows,
+            page_content_column: page_content_column.to_string(),
+        }
     }
 
     fn load(&self) -> Vec<PyLoadedDocument> {
@@ -648,7 +720,11 @@ impl PyDataFrameLoader {
     }
 
     fn __repr__(&self) -> String {
-        format!("DataFrameLoader(rows={}, column='{}')", self.rows.len(), self.page_content_column)
+        format!(
+            "DataFrameLoader(rows={}, column='{}')",
+            self.rows.len(),
+            self.page_content_column
+        )
     }
 }
 
@@ -684,12 +760,18 @@ impl PyGitLoader {
     }
 
     fn load(&self) -> PyResult<Vec<PyLoadedDocument>> {
-        let mut config = GitLoaderConfig::default();
-        config.extensions = self.extensions.clone();
-        if let Some(b) = &self.branch { config.branch = Some(b.clone()); }
+        let mut config = GitLoaderConfig {
+            extensions: self.extensions.clone(),
+            ..GitLoaderConfig::default()
+        };
+        if let Some(b) = &self.branch {
+            config.branch = Some(b.clone());
+        }
         let loader = GitLoader::new(&self.repo_path).with_config(config);
         loader.load().map(to_py_loaded).map_err(to_py_err)
     }
 
-    fn __repr__(&self) -> String { format!("GitLoader('{}')", self.repo_path) }
+    fn __repr__(&self) -> String {
+        format!("GitLoader('{}')", self.repo_path)
+    }
 }
