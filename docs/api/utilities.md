@@ -16,7 +16,7 @@ if pricing:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `model` | `str` | Model name (e.g., `"gpt-4"`, `"claude-3-opus-20240229"`) |
+| `model` | `str` | Model name (e.g., `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`) |
 
 Returns `(float, float) | None` — `(input_price_per_M, output_price_per_M)`, or `None` if the model is not in the pricing database.
 

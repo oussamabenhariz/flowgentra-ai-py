@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="FlowgentraAI" width="180"/>
+</p>
+
 # FlowgentraAI
 
 **Build AI agent workflows with graphs** -- Python bindings for the [FlowgentraAI](https://github.com/oussamabenhariz/FlowgentraAI) Rust engine, powered by [PyO3](https://pyo3.rs).
@@ -29,20 +33,22 @@ Define nodes as Python functions, wire them with edges, compile, and `invoke()`:
 
 ```python
 from flowgentra_ai.graph import StateGraph, END
-from flowgentra_ai import State
+from typing import TypedDict
 
-# 1. Define node functions (receive and return State)
-def greet(state):
-    name = state["name"]
-    state["greeting"] = f"Hello, {name}!"
-    return state
+# 1. Define state shape — TypedDict gives IDE autocomplete
+class GreetState(TypedDict):
+    name: str
+    greeting: str
 
-def uppercase(state):
-    state["greeting"] = state["greeting"].upper()
-    return state
+# 2. Define node functions (receive and return state dict)
+def greet(state: GreetState) -> GreetState:
+    return {**state, "greeting": f"Hello, {state['name']}!"}
 
-# 2. Build the graph
-builder = StateGraph()
+def uppercase(state: GreetState) -> GreetState:
+    return {**state, "greeting": state["greeting"].upper()}
+
+# 3. Build the graph
+builder = StateGraph(GreetState)
 builder.add_node("greet", greet)
 builder.add_node("uppercase", uppercase)
 builder.set_entry_point("greet")
@@ -50,9 +56,9 @@ builder.add_edge("greet", "uppercase")
 builder.add_edge("uppercase", END)
 graph = builder.compile()
 
-# 3. Invoke with initial state
-result = graph.invoke(State({"name": "World"}))
-print(result.to_dict())
+# 4. Invoke with initial state (plain dict)
+result = graph.invoke({"name": "World", "greeting": ""})
+print(result)
 # {"name": "World", "greeting": "HELLO, WORLD!"}
 ```
 
@@ -96,28 +102,28 @@ state = State.from_dict({"a": 1})
 Route dynamically based on state:
 
 ```python
-from flowgentra_ai.graph import StateGraph as StateGraphBuilder, END
-from flowgentra_ai import State
+from flowgentra_ai.graph import StateGraph, END
+from typing import TypedDict
 
-def classify(state):
-    text = state["input"]
-    state["category"] = "greeting" if "hello" in text.lower() else "question"
-    return state
+class RouterState(TypedDict):
+    input: str
+    category: str
+    output: str
 
-def handle_greeting(state):
-    state["output"] = "Hi there!"
-    return state
+def classify(state: RouterState) -> RouterState:
+    category = "greeting" if "hello" in state["input"].lower() else "question"
+    return {**state, "category": category}
 
-def handle_question(state):
-    state["output"] = "Let me think about that..."
-    return state
+def handle_greeting(state: RouterState) -> RouterState:
+    return {**state, "output": "Hi there!"}
 
-def router(state):
-    if state["category"] == "greeting":
-        return "handle_greeting"
-    return "handle_question"
+def handle_question(state: RouterState) -> RouterState:
+    return {**state, "output": "Let me think about that..."}
 
-builder = StateGraphBuilder()
+def router(state: RouterState) -> str:
+    return "handle_greeting" if state["category"] == "greeting" else "handle_question"
+
+builder = StateGraph(RouterState)
 builder.add_node("classify", classify)
 builder.add_node("handle_greeting", handle_greeting)
 builder.add_node("handle_question", handle_question)
@@ -127,7 +133,7 @@ builder.add_edge("handle_greeting", END)
 builder.add_edge("handle_question", END)
 graph = builder.compile()
 
-result = graph.invoke(State({"input": "hello world"}))
+result = graph.invoke({"input": "hello world", "category": "", "output": ""})
 print(result["output"])  # "Hi there!"
 ```
 
@@ -136,10 +142,13 @@ print(result["output"])  # "Hi there!"
 Call LLM providers directly:
 
 ```python
-from flowgentra_ai.llm import LLMConfig, LLM, Message
+from flowgentra_ai.llm import LLM, Message
 
-config = LLMConfig("openai", "gpt-4", api_key="sk-...")
-client = LLM.from_config(config)
+# Preferred: construct directly (key auto-resolved from env var)
+client = LLM(provider="openai", model="gpt-4o")
+
+# Or pass an explicit key
+client = LLM(provider="anthropic", model="claude-3-5-haiku-20241022", api_key="sk-ant-...")
 
 # Simple chat
 response = client.chat([
@@ -151,7 +160,7 @@ print(response.content)
 # With token usage tracking
 response, usage = client.chat_with_usage([Message.user("Hello!")])
 if usage:
-    print(f"Tokens: {usage.total_tokens}, Cost: ${usage.estimated_cost('gpt-4'):.4f}")
+    print(f"Tokens: {usage.total_tokens}, Cost: ${usage.estimated_cost('gpt-4o'):.4f}")
 
 # With retry and caching
 robust_client = client.with_retry(max_retries=3).cached(max_entries=100)
@@ -278,7 +287,7 @@ Use ready-made agent patterns:
 
 ```python
 from flowgentra_ai.agent import ZeroShotReAct, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 tool = ToolSpec("search", "Search the web")
 tool.add_parameter("query", "string")
@@ -286,7 +295,7 @@ tool.set_required("query")
 
 agent = ZeroShotReAct(
     name="my_agent",
-    llm=LLMConfig("openai", "gpt-4"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     system_prompt="You are a helpful assistant.",
     tools=[tool],
 )
@@ -300,10 +309,15 @@ print(result)
 Interrupt graph execution for human review:
 
 ```python
-from flowgentra_ai.graph import StateGraph as StateGraphBuilder, END
-from flowgentra_ai import State
+from flowgentra_ai.graph import StateGraph, END
+from typing import TypedDict
 
-builder = StateGraphBuilder()
+class PublishState(TypedDict):
+    topic: str
+    draft: str
+    approved: bool
+
+builder = StateGraph(PublishState)
 builder.add_node("draft", draft_fn)
 builder.add_node("publish", publish_fn)
 builder.set_entry_point("draft")
@@ -314,13 +328,13 @@ builder.set_checkpointer("./checkpoints")
 graph = builder.compile()
 
 # First run -- pauses before "publish"
-result = graph.invoke_with_thread("thread-1", State({"topic": "AI"}))
+result = graph.invoke_with_thread("thread-1", {"topic": "AI", "draft": "", "approved": False})
 
 # Human reviews, then resumes
 result = graph.resume("thread-1")
 
-# Or resume with modifications
-result = graph.resume_with_state("thread-1", State({"approved": True}))
+# Or resume with modified state
+result = graph.resume_with_state("thread-1", {"topic": "AI", "draft": "", "approved": True})
 ```
 
 ### Visualization

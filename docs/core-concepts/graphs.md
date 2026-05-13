@@ -39,7 +39,7 @@ Every graph has:
     from flowgentra_ai.graph import StateGraph, END
     from flowgentra_ai import State
 
-    builder = StateGraph()
+    builder = StateGraph(dict)
 
     # Add nodes
     builder.add_node("fetch",   fetch_fn)
@@ -267,14 +267,14 @@ Embed a compiled graph inside another graph. The inner graph runs as a single no
 
     ```python
     # Build inner graph
-    inner = StateGraph()
+    inner = StateGraph(dict)
     inner.add_node("step", step_fn)
     inner.set_entry_point("step")
     inner.add_edge("step", END)
     inner_graph = inner.compile()
 
     # Use it in outer graph
-    outer = StateGraph()
+    outer = StateGraph(dict)
     outer.add_node("prepare", prepare_fn)
     outer.add_subgraph("inner", inner_graph)   # ← subgraph as a node
     outer.set_entry_point("prepare")
@@ -403,9 +403,9 @@ For chat-based workflows, `MessageGraphBuilder` pre-configures message accumulat
 
     ```python
     from flowgentra_ai.graph import MessageGraphBuilder
-    from flowgentra_ai.llm import LLM, LLMConfig, Message
+    from flowgentra_ai.llm import LLM, Message
 
-    client = LLM.from_config(LLMConfig("openai", "gpt-4", api_key="sk-..."))
+    client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
     def chat_node(messages):
         response = client.chat(messages)

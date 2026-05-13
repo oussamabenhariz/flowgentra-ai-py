@@ -19,15 +19,16 @@ A production-ready chatbot that supports multiple users simultaneously, each wit
 # chatbot.py
 from flowgentra_ai.graph import StateGraph, END
 from flowgentra_ai.memory import ConversationMemory
-from flowgentra_ai.llm import LLMConfig, LLM, Message
+from flowgentra_ai.llm import LLM, Message
 from flowgentra_ai import State
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 
-client = LLM.from_config(
-    LLMConfig("openai", "gpt-4", api_key="sk-...")
+client = (
+    LLM(provider="openai", model="gpt-4o", api_key="sk-...")
     # Retry on transient failures, cache repeated identical questions
-).with_retry(max_retries=3).cached(max_entries=1000)
+    .with_retry(max_retries=3).cached(max_entries=1000)
+)
 
 # 50 messages per user — oldest dropped when exceeded
 memory = ConversationMemory(max_messages=50)
@@ -67,7 +68,7 @@ def save_history(state):
 
 # ── Graph ──────────────────────────────────────────────────────────────────────
 
-builder = StateGraph()
+builder = StateGraph(dict)
 builder.add_node("load",   load_history)
 builder.add_node("llm",    call_llm)
 builder.add_node("save",   save_history)

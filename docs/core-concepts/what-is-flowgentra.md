@@ -82,7 +82,7 @@ A graph wires nodes together and tells the engine the execution order.
 
 ```python
 # Python
-builder = StateGraph()
+builder = StateGraph(dict)
 builder.add_node("classify", classify)
 builder.add_node("respond", respond)
 builder.set_entry_point("classify")
@@ -121,7 +121,7 @@ There are two ways to use Flowgentra. Both use the same engine.
 Build the graph programmatically. Best for complex logic with non-trivial routing.
 
 ```python
-builder = StateGraph()
+builder = StateGraph(dict)
 builder.add_node("step_a", fn_a)
 builder.add_node("step_b", fn_b)
 builder.set_entry_point("step_a")
@@ -169,7 +169,7 @@ The Python library is a thin PyO3 wrapper around the Rust engine. When you call 
 
 | Rust | Python |
 |------|--------|
-| `StateGraph::<S>::builder()` | `StateGraph()` |
+| `StateGraph::<S>::builder()` | `StateGraph(MyState)` |
 | `DynState` | `State` |
 | `#[derive(State)]` | TypedDict / dict |
 | `#[register_handler]` | `@register_handler` |

@@ -11,10 +11,24 @@ from flowgentra_ai.graph import StateGraph, END
 ### Constructor
 
 ```python
-StateGraph()
+StateGraph(schema)
 ```
 
-Creates an empty builder.
+Creates an empty builder. Pass a TypedDict class or `dict` for untyped use:
+
+```python
+# Untyped (accepts any dict keys)
+builder = StateGraph(dict)
+
+# Typed (preferred for larger graphs)
+from typing import TypedDict
+
+class MyState(TypedDict):
+    input: str
+    output: str
+
+builder = StateGraph(MyState)
+```
 
 ---
 

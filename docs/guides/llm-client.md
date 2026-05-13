@@ -9,42 +9,28 @@ Flowgentra provides a unified LLM that works with 7 providers. You configure it 
 === "Python"
 
     ```python
-    from flowgentra_ai.llm import LLMConfig, LLM
+    from flowgentra_ai.llm import LLM
 
     # OpenAI
-    client = LLM.from_config(
-        LLMConfig("openai", "gpt-4", api_key="sk-...")
-    )
+    client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
     # Anthropic
-    client = LLM.from_config(
-        LLMConfig("anthropic", "claude-3-opus-20240229", api_key="sk-ant-...")
-    )
+    client = LLM(provider="anthropic", model="claude-3-5-sonnet-20241022", api_key="sk-ant-...")
 
     # Mistral
-    client = LLM.from_config(
-        LLMConfig("mistral", "mistral-large-latest", api_key="...")
-    )
+    client = LLM(provider="mistral", model="mistral-large-latest", api_key="...")
 
     # Groq (fast inference)
-    client = LLM.from_config(
-        LLMConfig("groq", "llama3-70b-8192", api_key="gsk_...")
-    )
+    client = LLM(provider="groq", model="llama3-70b-8192", api_key="gsk_...")
 
     # Ollama (local — no API key needed)
-    client = LLM.from_config(
-        LLMConfig("ollama", "llama3")
-    )
+    client = LLM(provider="ollama", model="llama3")
 
     # HuggingFace Inference API
-    client = LLM.from_config(
-        LLMConfig("huggingface", "meta-llama/Meta-Llama-3-8B-Instruct", api_key="hf_...")
-    )
+    client = LLM(provider="huggingface", model="meta-llama/Meta-Llama-3-8B-Instruct", api_key="hf_...")
 
     # Azure OpenAI
-    client = LLM.from_config(
-        LLMConfig("azure", "gpt-4", api_key="...")
-    )
+    client = LLM(provider="azure", model="gpt-4o", api_key="...")
     ```
 
 === "Rust"
@@ -53,14 +39,14 @@ Flowgentra provides a unified LLM that works with 7 providers. You configure it 
     use flowgentra_ai::llm::{LLMConfig, LLM};
 
     // Convenience constructors
-    let client = LLM::from_config(LLMConfig::openai("gpt-4", "sk-..."));
-    let client = LLM::from_config(LLMConfig::anthropic("claude-3-opus-20240229", "sk-ant-..."));
+    let client = LLM::from_config(LLMConfig::openai("gpt-4o", "sk-..."));
+    let client = LLM::from_config(LLMConfig::anthropic("claude-3-5-sonnet-20241022", "sk-ant-..."));
     let client = LLM::from_config(LLMConfig::ollama("llama3"));
 
     // Full config
     let config = LLMConfig {
         provider: "openai".to_string(),
-        model: "gpt-4".to_string(),
+        model: "gpt-4o".to_string(),
         api_key: "sk-...".to_string(),
         temperature: Some(0.7),
         max_tokens: Some(1000),
@@ -237,7 +223,7 @@ These return new clients that wrap the original — they're composable.
     fast = client.cached(max_entries=500)
 
     # Fallback to another provider if the first fails
-    backup = LLM.from_config(LLMConfig("anthropic", "claude-3-haiku-20240307", api_key="..."))
+    backup = LLM(provider="anthropic", model="claude-3-5-haiku-20241022", api_key="...")
     robust = client.with_fallback(backup)
 
     # Combine: retry, then cache the successful result
@@ -254,7 +240,7 @@ These return new clients that wrap the original — they're composable.
     let fast = client.cached(500);
 
     // Fallback
-    let backup = LLM::from_config(LLMConfig::anthropic("claude-3-haiku-20240307", "..."));
+    let backup = LLM::from_config(LLMConfig::anthropic("claude-3-5-haiku-20241022", "..."));
     let robust = client.with_fallback(backup);
     ```
 
@@ -269,13 +255,13 @@ Force the LLM to return valid JSON or JSON matching a specific schema. This is m
     ```python
     from flowgentra_ai.types import ResponseFormat
 
-    config = LLMConfig("openai", "gpt-4", api_key="sk-...")
+    client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
     # Option 1: Force JSON (any valid JSON)
-    config.set_response_format(ResponseFormat.json())
+    client.set_response_format(ResponseFormat.json())
 
     # Option 2: Force JSON matching a specific schema
-    config.set_response_format(ResponseFormat.json_schema("person", {
+    client.set_response_format(ResponseFormat.json_schema("person", {
         "type": "object",
         "properties": {
             "name": {"type": "string"},
@@ -285,7 +271,6 @@ Force the LLM to return valid JSON or JSON matching a specific schema. This is m
         "required": ["name", "age"],
     }))
 
-    client = LLM.from_config(config)
     response = client.chat([Message.user("Extract: John is 30 years old from London")])
     import json
     data = json.loads(response.content)

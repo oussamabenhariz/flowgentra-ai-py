@@ -26,7 +26,7 @@ Here's a complete RAG system that loads documents, indexes them, and answers que
         Embeddings, InMemoryVectorStore, Retriever, RetrievalConfig,
         Document, chunk_text,
     )
-    from flowgentra_ai.llm import LLMConfig, LLM, Message
+    from flowgentra_ai.llm import LLM, Message
     from flowgentra_ai.graph import StateGraph, END
     from flowgentra_ai import State
 
@@ -54,7 +54,7 @@ Here's a complete RAG system that loads documents, indexes them, and answers que
     )
 
     # 5. LLM (generates answers)
-    client = LLM.from_config(LLMConfig("openai", "gpt-4", api_key="sk-..."))
+    client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
     # 6. RAG graph (coordinates the pipeline)
     def retrieve_node(state):
@@ -72,7 +72,7 @@ Here's a complete RAG system that loads documents, indexes them, and answers que
         state["answer"] = response.content
         return state
 
-    builder = StateGraph()
+    builder = StateGraph(dict)
     builder.add_node("retrieve", retrieve_node)
     builder.add_node("answer",   answer_node)
     builder.set_entry_point("retrieve")

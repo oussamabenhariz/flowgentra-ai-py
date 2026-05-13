@@ -22,7 +22,7 @@ This requires **checkpointing** to be enabled so the state is persisted between 
         state["status"] = "published"
         return state
 
-    builder = StateGraph()
+    builder = StateGraph(dict)
     builder.add_node("draft",   draft)
     builder.add_node("publish", publish)
     builder.set_entry_point("draft")
@@ -159,10 +159,10 @@ A content pipeline where humans approve both the outline and the final draft:
 
     ```python
     from flowgentra_ai.graph import StateGraph, END
-    from flowgentra_ai.llm import LLMConfig, LLM, Message
+    from flowgentra_ai.llm import LLM, Message
     from flowgentra_ai import State
 
-    client = LLM.from_config(LLMConfig("openai", "gpt-4", api_key="sk-..."))
+    client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
     def create_outline(state):
         response = client.chat([
@@ -185,7 +185,7 @@ A content pipeline where humans approve both the outline and the final draft:
         # In real life: post to CMS, send email, etc.
         return state
 
-    builder = StateGraph()
+    builder = StateGraph(dict)
     builder.add_node("outline", create_outline)
     builder.add_node("draft",   write_draft)
     builder.add_node("publish", publish)

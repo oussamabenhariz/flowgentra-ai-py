@@ -122,7 +122,7 @@ Build a prebuilt agent using one of the typed constructor classes. Each class us
 ```python
 AgentClass(
     name: str,
-    llm: LLMConfig,
+    llm: LLM,
     system_prompt: str = "",
     tools: list[ToolSpec] = [],
     retries: int = 3,
@@ -135,11 +135,11 @@ Available classes: `ZeroShotReAct`, `FewShotReAct`, `Conversational`, `ToolCalli
 
 ```python
 from flowgentra_ai.agent import ZeroShotReAct, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 agent = ZeroShotReAct(
     name="assistant",
-    llm=LLMConfig("openai", "gpt-4", temperature=0.2),
+    llm=LLM(provider="openai", model="gpt-4o", temperature=0.2),
     system_prompt="You are a helpful assistant.",
     tools=[my_tool],
     retries=3,
@@ -151,10 +151,11 @@ answer = agent.execute_input("What is the population of Japan?")
 
 ```python
 from flowgentra_ai.agent import FewShotReAct
+from flowgentra_ai.llm import LLM
 
 agent = FewShotReAct(
     name="specialist",
-    llm=LLMConfig("openai", "gpt-4"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     system_prompt="Example 1: ...\nExample 2: ...",
     tools=[data_tool],
     memory_steps=5,
@@ -165,10 +166,11 @@ agent = FewShotReAct(
 
 ```python
 from flowgentra_ai.agent import Conversational
+from flowgentra_ai.llm import LLM
 
 agent = Conversational(
     name="chatbot",
-    llm=LLMConfig("openai", "gpt-4"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     memory_steps=20,
 )
 r1 = agent.execute_input("My name is Alice.")

@@ -98,9 +98,9 @@ OPENAI_API_KEY=sk-...
 
     ```python
     import os
-    from flowgentra_ai.llm import LLMConfig
+    from flowgentra_ai.llm import LLM
 
-    config = LLMConfig("openai", "gpt-4", api_key=os.environ["OPENAI_API_KEY"])
+    client = LLM(provider="openai", model="gpt-4o", api_key=os.environ["OPENAI_API_KEY"])
     ```
 
 === "Rust"

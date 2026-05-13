@@ -21,12 +21,12 @@ from flowgentra_ai.supervision import (
     Supervisor, SupervisorNodeConfig, OrchestrationStrategy,
 )
 from flowgentra_ai.graph import StateGraph, END
-from flowgentra_ai.llm import LLMConfig, LLM, Message
+from flowgentra_ai.llm import LLM, Message
 from flowgentra_ai import State
 import os
 
 api_key = os.environ["OPENAI_API_KEY"]
-client  = LLM.from_config(LLMConfig("openai", "gpt-4", api_key=api_key))
+client  = LLM(provider="openai", model="gpt-4o", api_key=api_key)
 
 # ── Researcher ─────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ def researcher_node(state):
     state["research_done"] = True
     return state
 
-researcher = StateGraph()
+researcher = StateGraph(dict)
 researcher.add_node("research", researcher_node)
 researcher.set_entry_point("research")
 researcher.add_edge("research", END)
@@ -64,7 +64,7 @@ def analyst_node(state):
     state["analysis_done"] = True
     return state
 
-analyst = StateGraph()
+analyst = StateGraph(dict)
 analyst.add_node("analyze", analyst_node)
 analyst.set_entry_point("analyze")
 analyst.add_edge("analyze", END)
@@ -89,7 +89,7 @@ def writer_node(state):
     state["writing_done"] = True
     return state
 
-writer = StateGraph()
+writer = StateGraph(dict)
 writer.add_node("write", writer_node)
 writer.set_entry_point("write")
 writer.add_edge("write", END)

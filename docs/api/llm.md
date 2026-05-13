@@ -24,7 +24,7 @@ LLMConfig(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `provider` | `str` | required | Provider name: `"openai"`, `"anthropic"`, `"mistral"`, `"groq"`, `"ollama"`, `"huggingface"`, `"azure"` |
-| `model` | `str` | required | Model identifier (e.g., `"gpt-4"`, `"claude-3-opus-20240229"`) |
+| `model` | `str` | required | Model identifier (e.g., `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`) |
 | `api_key` | `str` | `""` | API key. Not needed for Ollama. |
 | `temperature` | `float \| None` | provider default | Randomness of responses, 0.0 (deterministic) to 2.0 (creative) |
 | `max_tokens` | `int \| None` | provider default | Maximum tokens in the response |
@@ -36,7 +36,7 @@ config = LLMConfig("openai", "gpt-4", api_key="sk-...")
 
 # With options
 config = LLMConfig(
-    "anthropic", "claude-3-opus-20240229",
+    "anthropic", "claude-3-5-sonnet-20241022",
     api_key="sk-ant-...",
     temperature=0.3,
     max_tokens=1000,
@@ -83,16 +83,25 @@ from flowgentra_ai.llm import LLM
 
 ### Class Methods
 
+#### `LLM(provider, model, ...)` — preferred constructor
+
+Create a client directly (recommended):
+
+```python
+client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
+```
+
 #### `LLM.from_config(config)` → `LLM`
 
-Create a client from a config.
+Create a client from an `LLMConfig` object.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `config` | `LLMConfig` | Provider configuration |
 
 ```python
-client = LLM.from_config(LLMConfig("openai", "gpt-4", api_key="sk-..."))
+config = LLMConfig("openai", "gpt-4o", api_key="sk-...")
+client = LLM.from_config(config)
 ```
 
 ---
@@ -175,7 +184,7 @@ Add a fallback provider. If this client fails, the fallback is tried.
 | `client` | `LLM` | Backup client |
 
 ```python
-backup = LLM.from_config(LLMConfig("anthropic", "claude-3-haiku-20240307", api_key="..."))
+backup = LLM(provider="anthropic", model="claude-3-5-haiku-20241022", api_key="...")
 robust = client.with_fallback(backup)
 ```
 

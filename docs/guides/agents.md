@@ -14,9 +14,9 @@ Each agent type is its own class. Pass the LLM config directly — no builder ch
 
 ```python
 from flowgentra_ai.agent import ZeroShotReAct, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
-llm = LLMConfig("openai", "gpt-4")  # or any other provider
+llm = LLM(provider="openai", model="gpt-4o")  # or any other provider
 
 agent = ZeroShotReAct(
     name="my-agent",
@@ -87,7 +87,7 @@ Flowgentra provides seven built-in agent strategies optimized for different scen
 ```python
 ZeroShotReAct(
     name: str,
-    llm: LLMConfig,
+    llm: LLM,
     system_prompt: str = "",
     tools: list[ToolSpec] = [],
     retries: int = 3,
@@ -116,7 +116,7 @@ Input Query
 
 **Parameters:**
 - `name` (str): Agent identifier
-- `llm` (LLMConfig): Configured LLM — set `temperature` and `max_tokens` on the config
+- `llm` (LLM): Configured LLM — set `temperature` and `max_tokens` on the instance
 - `system_prompt` (str): Override the default ReAct system prompt
 - `tools` (list[ToolSpec]): Tools the agent can call
 - `retries` (int): Retry failed LLM calls, default 3
@@ -131,7 +131,7 @@ Input Query
 **Example:**
 ```python
 from flowgentra_ai.agent import ZeroShotReAct, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 # Define tools
 search = ToolSpec("web_search", "Search the web for current information")
@@ -143,7 +143,7 @@ calc.add_parameter("expression", "string")
 calc.set_required("expression")
 
 # Configure LLM with desired settings
-llm = LLMConfig("openai", "gpt-4", temperature=0.2, max_tokens=2000)
+llm = LLM(provider="openai", model="gpt-4o", temperature=0.2, max_tokens=2000)
 
 # Build agent
 agent = ZeroShotReAct(
@@ -167,7 +167,7 @@ print(result)
 ```python
 FewShotReAct(
     name: str,
-    llm: LLMConfig,
+    llm: LLM,
     system_prompt: str = "",   # include worked examples here
     tools: list[ToolSpec] = [],
     retries: int = 3,
@@ -179,7 +179,7 @@ Same loop as ZeroShotReAct, but the system prompt includes worked examples. This
 
 **Parameters:**
 - `name` (str): Agent identifier
-- `llm` (LLMConfig): Configured LLM (set temperature/max_tokens on the config)
+- `llm` (LLM): Configured LLM (set temperature/max_tokens on the instance)
 - `system_prompt` (str): Include worked examples in this prompt
 - `tools` (list): ToolSpec objects available to the agent
 - `retries` (int): Retry failed LLM calls, default 3
@@ -203,7 +203,7 @@ class Example:
 **Example:**
 ```python
 from flowgentra_ai.agent import FewShotReAct, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 # Craft examples directly inside the system prompt string
 examples_prompt = """
@@ -253,7 +253,7 @@ examples_legacy = [
 ]
 
 # Build agent – pass examples via system_prompt
-llm = LLMConfig("openai", "gpt-4")
+llm = LLM(provider="openai", model="gpt-4o")
 agent = FewShotReAct(
     name="finance-analyzer",
     llm=llm,
@@ -273,7 +273,7 @@ result = agent.execute_input("What was Apple's revenue growth in 2023?")
 ```python
 Conversational(
     name: str,
-    llm: LLMConfig,
+    llm: LLM,
     system_prompt: str = "",
     tools: list[ToolSpec] = [],
     retries: int = 3,
@@ -285,7 +285,7 @@ Multi-turn dialogue with persistent conversation history. The agent remembers pr
 
 **Parameters:**
 - `name` (str): Agent identifier
-- `llm` (LLMConfig): Configured LLM
+- `llm` (LLM): Configured LLM
 - `system_prompt` (str): Initial system instruction
 - `tools` (list): Optional tools the agent can call
 - `retries` (int): Retry failed LLM calls, default 3
@@ -300,9 +300,9 @@ Multi-turn dialogue with persistent conversation history. The agent remembers pr
 **Example:**
 ```python
 from flowgentra_ai.agent import Conversational
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
-llm = LLMConfig("openai", "gpt-4", temperature=0.7, max_tokens=1000)
+llm = LLM(provider="openai", model="gpt-4o", temperature=0.7, max_tokens=1000)
 
 agent = Conversational(
     name="support-bot",
@@ -331,7 +331,7 @@ turn3 = agent.execute_input("I tried but I didn't get the reset email")
 ```python
 agent = Conversational(
     name="support-agent",
-    llm=LLMConfig("openai", "gpt-4"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     tools=[lookup_account_tool, check_email_tool, create_ticket_tool],
 )
 
@@ -348,7 +348,7 @@ result = agent.execute_input("I'm moving to a new provider")
 ```python
 ToolCalling(
     name: str,
-    llm: LLMConfig,
+    llm: LLM,
     system_prompt: str = "",
     tools: list[ToolSpec] = [],
     retries: int = 3,
@@ -393,7 +393,7 @@ Input
 **Example:**
 ```python
 from flowgentra_ai.agent import ToolCalling, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 # Define tools with rich schemas
 get_weather = ToolSpec("get_weather", "Get current weather for a location")
@@ -407,7 +407,7 @@ search.set_required("query")
 
 agent = ToolCalling(
     name="tool-calling-agent",
-    llm=LLMConfig("openai", "gpt-4o"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     tools=[get_weather, search],
 )
 
@@ -419,7 +419,7 @@ print(result)
 ```python
 agent = ToolCalling(
     name="claude-tool-agent",
-    llm=LLMConfig("anthropic", "claude-3-5-sonnet-20241022"),
+    llm=LLM(provider="anthropic", model="claude-3-5-sonnet-20241022"),
     tools=[search],
 )
 ```
@@ -471,7 +471,7 @@ Input
 ```python
 StructuredChat(
     name: str,
-    llm: LLMConfig,
+    llm: LLM,
     system_prompt: str = "",
     tools: list[ToolSpec] = [],
     retries: int = 3,
@@ -482,7 +482,7 @@ StructuredChat(
 **Example:**
 ```python
 from flowgentra_ai.agent import StructuredChat, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 calculator = ToolSpec("calculator", "Evaluate a mathematical expression")
 calculator.add_parameter("expression", "string")
@@ -496,7 +496,7 @@ lookup.set_required("id")
 
 agent = StructuredChat(
     name="structured-agent",
-    llm=LLMConfig("openai", "gpt-4", temperature=0.0),
+    llm=LLM(provider="openai", model="gpt-4o", temperature=0.0),
     tools=[calculator, lookup],
 )
 
@@ -512,7 +512,7 @@ print(result)
 ```python
 SelfAskWithSearch(
     name: str,
-    llm: LLMConfig,
+    llm: LLM,
     system_prompt: str = "",
     tools: list[ToolSpec] = [],
     retries: int = 3,
@@ -554,7 +554,7 @@ So the final answer is: No
 **Example:**
 ```python
 from flowgentra_ai.agent import SelfAskWithSearch, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 search = ToolSpec("search", "Search for factual information about a query")
 search.add_parameter("query", "string")
@@ -562,7 +562,7 @@ search.set_required("query")
 
 agent = SelfAskWithSearch(
     name="research-decomposer",
-    llm=LLMConfig("openai", "gpt-4", temperature=0.0),
+    llm=LLM(provider="openai", model="gpt-4o", temperature=0.0),
     tools=[search],
 )
 
@@ -592,7 +592,7 @@ result = agent.execute_input(
 ```python
 ReactDocstore(
     name: str,
-    llm: LLMConfig,
+    llm: LLM,
     system_prompt: str = "",
     tools: list[ToolSpec] = [],
     retries: int = 3,
@@ -631,7 +631,7 @@ Input
 **Example:**
 ```python
 from flowgentra_ai.agent import ReactDocstore, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 search_tool = ToolSpec("search", "Search the document store")
 search_tool.add_parameter("query", "string")
@@ -643,7 +643,7 @@ lookup_tool.set_required("term")
 
 agent = ReactDocstore(
     name="docstore-agent",
-    llm=LLMConfig("openai", "gpt-4", temperature=0.0),
+    llm=LLM(provider="openai", model="gpt-4o", temperature=0.0),
     tools=[search_tool, lookup_tool],
 )
 
@@ -723,7 +723,7 @@ All seven agent classes share the same keyword-argument signature:
 ```python
 AgentClass(
     name: str,                     # Agent identifier
-    llm: LLMConfig,               # Configured LLM (provider, model, temperature, …)
+    llm: LLM,                     # Configured LLM (provider, model, temperature, …)
     system_prompt: str = "",       # Override default system instruction
     tools: list[ToolSpec] = [],    # Tools the agent can call
     retries: int = 3,             # Retry failed LLM calls
@@ -731,13 +731,14 @@ AgentClass(
 )
 ```
 
-**LLMConfig carries temperature and max_tokens:**
+**LLM carries temperature and max_tokens:**
 
 ```python
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
-llm = LLMConfig(
-    "openai", "gpt-4",
+llm = LLM(
+    provider="openai",
+    model="gpt-4o",
     temperature=0.3,
     max_tokens=1500,
 )
@@ -746,11 +747,11 @@ llm = LLMConfig(
 **Example — ZeroShotReAct:**
 ```python
 from flowgentra_ai.agent import ZeroShotReAct, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 agent = ZeroShotReAct(
     name="my-agent",
-    llm=LLMConfig("openai", "gpt-4", temperature=0.3, max_tokens=1500),
+    llm=LLM(provider="openai", model="gpt-4o", temperature=0.3, max_tokens=1500),
     system_prompt="You are helpful.",
     tools=[search_tool, calc_tool],
     retries=2,
@@ -994,28 +995,28 @@ tool = ToolSpec("foo", "Does stuff")
 
 ### 3. Use Temperature Appropriately
 
-Set temperature and max_tokens on the `LLMConfig` passed to the agent:
+Set temperature and max_tokens on the `LLM` instance passed to the agent:
 
 ```python
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 # For analytical/deterministic reasoning
-llm = LLMConfig("openai", "gpt-4", temperature=0.1)  # Very focused
+llm = LLM(provider="openai", model="gpt-4o", temperature=0.1)  # Very focused
 
 # For creative tasks
-llm = LLMConfig("openai", "gpt-4", temperature=0.9)  # More varied
+llm = LLM(provider="openai", model="gpt-4o", temperature=0.9)  # More varied
 
 # Default/balanced
-llm = LLMConfig("openai", "gpt-4", temperature=0.7)  # Most scenarios
+llm = LLM(provider="openai", model="gpt-4o", temperature=0.7)  # Most scenarios
 ```
 
 ### 4. Set Reasonable Limits
 
 ```python
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 from flowgentra_ai.agent import ZeroShotReAct
 
-llm = LLMConfig("openai", "gpt-4", max_tokens=2000)
+llm = LLM(provider="openai", model="gpt-4o", max_tokens=2000)
 
 agent = ZeroShotReAct(
     name="my-agent",
@@ -1043,7 +1044,7 @@ system_prompt = "You are helpful"
 # If you have domain-specific reasoning patterns, show examples in system_prompt
 agent = FewShotReAct(
     name="specialist",
-    llm=LLMConfig("openai", "gpt-4"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     system_prompt="""
     Example 1:
     Question: ...  Thought: ...  Action: ...  Answer: ...
@@ -1095,11 +1096,11 @@ for query in test_queries:
 
 ```python
 from flowgentra_ai.agent import ZeroShotReAct
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 research_agent = ZeroShotReAct(
     name="researcher",
-    llm=LLMConfig("openai", "gpt-4"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     system_prompt="""You are a research assistant.
         1. Search for relevant information
         2. Fetch and read sources
@@ -1116,7 +1117,7 @@ from flowgentra_ai.agent import Conversational
 
 support_agent = Conversational(
     name="support-bot",
-    llm=LLMConfig("openai", "gpt-4"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     system_prompt="""You are a helpful support agent.
         - Greet customers warmly
         - Look up their account when needed
@@ -1132,7 +1133,7 @@ support_agent = Conversational(
 ```python
 code_agent = ZeroShotReAct(
     name="code-analyzer",
-    llm=LLMConfig("openai", "gpt-4", temperature=0.2),
+    llm=LLM(provider="openai", model="gpt-4o", temperature=0.2),
     system_prompt="""You are a code analysis expert.
         - Read relevant source files
         - Run tests to understand behavior

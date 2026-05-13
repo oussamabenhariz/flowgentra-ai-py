@@ -31,7 +31,7 @@ def shout(state):
     return state
 
 # Wire them together
-builder = StateGraph()
+builder = StateGraph(dict)
 builder.add_node("greet", greet)
 builder.add_node("shout", shout)
 builder.set_entry_point("greet")
@@ -47,11 +47,9 @@ print(result["message"])   # "HELLO, ALICE!"
 ### Step 3 — Add an LLM
 
 ```python
-from flowgentra_ai.llm import LLMConfig, LLM, Message
+from flowgentra_ai.llm import LLM, Message
 
-client = LLM.from_config(
-    LLMConfig("openai", "gpt-4", api_key="sk-...")
-)
+client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
 def ask_llm(state):
     response = client.chat([
@@ -61,7 +59,7 @@ def ask_llm(state):
     state["answer"] = response.content
     return state
 
-builder = StateGraph()
+builder = StateGraph(dict)
 builder.add_node("ask", ask_llm)
 builder.set_entry_point("ask")
 builder.add_edge("ask", END)
@@ -92,7 +90,7 @@ def make_statement(state):
 def router(state):
     return "answer_question" if state["is_question"] else "make_statement"
 
-builder = StateGraph()
+builder = StateGraph(dict)
 builder.add_node("classify", classify)
 builder.add_node("answer_question", answer_question)
 builder.add_node("make_statement", make_statement)
@@ -112,7 +110,7 @@ For common patterns (ReAct, conversational), use a typed agent class:
 
 ```python
 from flowgentra_ai.agent import ZeroShotReAct, ToolSpec
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 calc = ToolSpec("calculator", "Perform arithmetic")
 calc.add_parameter("expression", "string")
@@ -120,7 +118,7 @@ calc.set_required("expression")
 
 agent = ZeroShotReAct(
     name="math-assistant",
-    llm=LLMConfig("openai", "gpt-4"),
+    llm=LLM(provider="openai", model="gpt-4o"),
     system_prompt="You are a math assistant.",
     tools=[calc],
 )

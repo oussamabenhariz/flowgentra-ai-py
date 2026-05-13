@@ -120,10 +120,10 @@ SummaryMemory(config: SummaryConfig)
 ```
 
 ```python
-from flowgentra_ai.llm import LLMConfig
+from flowgentra_ai.llm import LLM
 
 config = SummaryConfig(
-    llm_config=LLMConfig("openai", "gpt-3.5-turbo", api_key="sk-..."),
+    llm=LLM(provider="openai", model="gpt-4o-mini", api_key="sk-..."),
     summary_threshold=25,
 )
 mem = SummaryMemory(config)

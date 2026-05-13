@@ -260,7 +260,7 @@ def validate_input_node(state):
         state["error"] = str(e)
         return state
 
-graph = StateGraph()
+graph = StateGraph(dict)
 graph.add_node("validate", validate_input_node)
 graph.set_entry_point("validate")
 ```
@@ -271,7 +271,7 @@ graph.set_entry_point("validate")
 from flowgentra_ai.validation import StateTransitionValidator
 
 # Automatically validate state between all nodes
-graph = StateGraph()
+graph = StateGraph(dict)
 graph.add_state_validator(ConversationStateValidator())
 
 # Or validate specific transitions

@@ -75,10 +75,10 @@ Use an LLM to evaluate document relevance. Most flexible but slowest.
 
     ```python
     from flowgentra_ai.rerankers import LLMReranker
-    from flowgentra_ai.llm import LLM, LLMConfig
+    from flowgentra_ai.llm import LLM
 
     # Configure LLM for reranking
-    llm = LLM(LLMConfig("gpt-4", temperature=0.1))
+    llm = LLM(provider="openai", model="gpt-4o", temperature=0.1)
 
     reranker = LLMReranker(
         llm=llm,

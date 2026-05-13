@@ -394,11 +394,11 @@ The most common pattern is an LLM-tool loop: the LLM decides which tools to call
     ```python
     from flowgentra_ai.graph import StateGraph, END
     from flowgentra_ai.tools import ToolRegistry, create_tool_node
-    from flowgentra_ai.llm import LLMConfig, LLM, Message, ToolDefinition
+    from flowgentra_ai.llm import LLM, Message, ToolDefinition
     from flowgentra_ai import State
 
     registry = ToolRegistry.with_builtins()
-    client   = LLM.from_config(LLMConfig("openai", "gpt-4", api_key="sk-..."))
+    client   = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
     # Describe tools to the LLM
     tools = [
@@ -435,7 +435,7 @@ The most common pattern is an LLM-tool loop: the LLM decides which tools to call
             return "tools"
         return "__end__"
 
-    builder = StateGraph()
+    builder = StateGraph(dict)
     builder.add_node("llm",   llm_node)
     builder.add_node("tools", tool_executor)
     builder.set_entry_point("llm")

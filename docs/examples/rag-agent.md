@@ -24,7 +24,7 @@ from flowgentra_ai.rag import (
     Embeddings, InMemoryVectorStore, Retriever, RetrievalConfig,
     Document, extract_and_chunk, load_directory,
 )
-from flowgentra_ai.llm import LLMConfig, LLM, Message
+from flowgentra_ai.llm import LLM, Message
 from flowgentra_ai import State
 
 # ── Build the knowledge base ───────────────────────────────────────────────────
@@ -115,7 +115,7 @@ def build_rag_graph(retriever, client):
         state["_client"] = client
         return generate_answer(state)
 
-    builder = StateGraph()
+    builder = StateGraph(dict)
     builder.add_node("retrieve", retrieve_node)
     builder.add_node("answer",   answer_node)
     builder.set_entry_point("retrieve")
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     import os
 
     api_key = os.environ["OPENAI_API_KEY"]
-    client  = LLM.from_config(LLMConfig("openai", "gpt-4", api_key=api_key))
+    client  = LLM(provider="openai", model="gpt-4o", api_key=api_key)
 
     # Index your docs (this takes a while the first time)
     store, emb, retriever = build_index("./knowledge_base/")

@@ -47,7 +47,7 @@ A graph is a directed acyclic workflow where:
 ```python
 from flowgentra_ai.graph import StateGraph, END
 
-builder = StateGraph()  # Untyped (accepts any state)
+builder = StateGraph(dict)  # Untyped (accepts any state)
 ```
 
 ### Adding Nodes
@@ -392,7 +392,7 @@ Embed one graph inside another as a single node:
 
 ```python
 # Build inner graph
-inner_builder = StateGraph()
+inner_builder = StateGraph(dict)
 inner_builder.add_node("process", process_fn)
 inner_builder.add_node("validate", validate_fn)
 inner_builder.set_entry_point("process")
@@ -405,7 +405,7 @@ def subgraph_wrapper(state):
     result = await inner_graph.invoke(state)
     return result
 
-outer_builder = StateGraph()
+outer_builder = StateGraph(dict)
 outer_builder.add_node("prepare", prepare_fn)
 outer_builder.add_node("subprocess", subgraph_wrapper)
 outer_builder.set_entry_point("prepare")
@@ -514,11 +514,9 @@ Reads a prompt from state, calls the LLM, writes the response:
 
 **Example:**
 ```python
-from flowgentra_ai.llm import LLM, LLMConfig
+from flowgentra_ai.llm import LLM
 
-client = LLM.from_config(
-    LLMConfig("openai", "gpt-4", api_key="sk-...")
-)
+client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
 builder.add_llm_node(
     "generate",
@@ -728,7 +726,7 @@ def log_result(state):
     return state
 
 # Build Graph
-builder = StateGraph()
+builder = StateGraph(dict)
 
 # Add nodes
 builder.add_node("classify", classify_task)

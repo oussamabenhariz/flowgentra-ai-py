@@ -136,14 +136,14 @@ Summarizes old messages with an LLM instead of dropping them. Keeps semantic con
 **Constructor:**
 ```python
 mem = SummaryMemory(
-    llm_config: LLMConfig,
+    llm: LLM,
     summary_threshold: int = 20,
     max_tokens_per_summary: int = 500
 ) -> SummaryMemory
 ```
 
 **Parameters:**
-- `llm_config` (LLMConfig): LLM for summarization (see llm.md)
+- `llm` (LLM): LLM for summarization (see llm.md)
 - `summary_threshold` (int): Summarize when history exceeds N messages (default: 20)
 - `max_tokens_per_summary` (int): Token limit per summary (default: 500)
 
@@ -170,12 +170,12 @@ mem.clear(thread_id: str) -> None
 **Example:**
 ```python
 from flowgentra_ai.memory import SummaryMemory
-from flowgentra_ai.llm import LLMConfig, Message
+from flowgentra_ai.llm import LLM, Message
 
-llm_config = LLMConfig("openai", "gpt-3.5-turbo", api_key="sk-...")
+llm = LLM(provider="openai", model="gpt-4o-mini", api_key="sk-...")
 
 mem = SummaryMemory(
-    llm_config=llm_config,
+    llm=llm,
     summary_threshold=20,
     max_tokens_per_summary=500
 )
@@ -236,11 +236,11 @@ Wire conversation memory into a chatbot node:
 ```python
 from flowgentra_ai.graph import StateGraph, END
 from flowgentra_ai.memory import ConversationMemory
-from flowgentra_ai.llm import LLMConfig, LLM, Message
+from flowgentra_ai.llm import LLM, Message
 from flowgentra_ai import State
 
 mem = ConversationMemory(max_messages=50)
-client = LLM.from_config(LLMConfig("openai", "gpt-4", api_key="sk-..."))
+client = LLM(provider="openai", model="gpt-4o", api_key="sk-...")
 
 def chat_node(state):
     thread_id = state["thread_id"]
@@ -266,7 +266,7 @@ def chat_node(state):
     return state
 
 # Build graph
-builder = StateGraph()
+builder = StateGraph(dict)
 builder.add_node("chat", chat_node)
 builder.set_entry_point("chat")
 builder.add_edge("chat", END)
@@ -317,7 +317,7 @@ from flowgentra_ai.graph import StateGraph
 # Create graph with checkpointing
 checkpointer = FileCheckpointer("./my_checkpoints")
 
-builder = StateGraph()
+builder = StateGraph(dict)
 # ... add nodes ...
 graph = builder.compile(checkpointer=checkpointer)
 
@@ -380,7 +380,7 @@ Each checkpoint file contains:
 ### Pattern 1: Short Chats (ConversationMemory)
         return state
 
-    builder = StateGraph()
+    builder = StateGraph(dict)
     builder.add_node("chat", chat)
     builder.set_entry_point("chat")
     builder.add_edge("chat", END)
@@ -530,7 +530,7 @@ def chat(state):
 from flowgentra_ai.memory import SummaryMemory
 
 mem = SummaryMemory(
-    llm_config=LLMConfig("openai", "gpt-3.5-turbo"),
+    llm=LLM(provider="openai", model="gpt-4o-mini"),
     summary_threshold=30
 )
 
