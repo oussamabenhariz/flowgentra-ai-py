@@ -943,10 +943,18 @@ impl PySupervisor {
             ))
         })?;
 
-        // Execute
-        let result = crate::run_async(async {
-            use flowgentra_ai::core::node::nodes_trait::PluggableNode;
-            supervisor.run(state.inner.clone()).await
+        // Execute — release the GIL before entering the async runtime so that
+        // Python node callbacks invoked via spawn_blocking can acquire it.
+        // Without this, spawn_blocking threads deadlock waiting for the GIL
+        // while the calling thread holds it blocked on run_async.
+        let state_clone = state.inner.clone();
+        let result = Python::with_gil(|py| {
+            py.allow_threads(|| {
+                crate::run_async(async move {
+                    use flowgentra_ai::core::node::nodes_trait::PluggableNode;
+                    supervisor.run(state_clone).await
+                })
+            })
         });
 
         match result {
@@ -996,9 +1004,11 @@ impl PySupervisor {
             let agent = self.agents.iter().find(|(n, _)| n == &next_agent);
             match agent {
                 Some((_, AgentChild::Graph(graph))) => {
-                    current_state = crate::run_async(graph.invoke(current_state)).map_err(|e| {
-                        crate::error::AgentExecutionError::new_err(format!("{}", e))
-                    })?;
+                    let state_for_invoke = current_state.clone();
+                    current_state = Python::with_gil(|py| {
+                        py.allow_threads(|| crate::run_async(graph.invoke(state_for_invoke)))
+                    })
+                    .map_err(|e| crate::error::AgentExecutionError::new_err(format!("{}", e)))?;
                 }
                 Some((_, AgentChild::Callable(func))) => {
                     current_state = Python::with_gil(|py| -> PyResult<DynState> {

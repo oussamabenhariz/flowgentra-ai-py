@@ -1,6 +1,6 @@
 [package]
 name = "flowgentra-ai-py"
-version = "0.2.5"
+version = "0.2.6"
 
 edition = "2021"
 authors = ["Oussama Ben Hariz"]
