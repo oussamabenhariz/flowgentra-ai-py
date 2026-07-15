@@ -202,9 +202,16 @@ pub struct PyGraphBasedAgent {
 
 #[pymethods]
 impl PyGraphBasedAgent {
-    /// Execute the agent with a text input and get a text response.
-    fn execute_input(&self, input: &str) -> PyResult<String> {
-        crate::run_async(self.inner.execute_input(input)).map_err(to_py_err)
+    /// Run the agent with a text input and return the text response.
+    fn run(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.execute_input(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Deprecated alias for run().
+    fn execute_input(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        crate::deprecation_warn(py, "execute_input", "run")?;
+        self.run(py, input)
     }
 
     /// Get the agent name.
@@ -397,8 +404,16 @@ impl PyZeroShotReAct {
         Ok(Self { inner: agent })
     }
 
-    fn execute_input(&self, input: &str) -> PyResult<String> {
-        crate::run_async(self.inner.execute_input(input)).map_err(to_py_err)
+    /// Run the agent with a text input and return the text response.
+    fn run(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.execute_input(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Deprecated alias for run().
+    fn execute_input(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        crate::deprecation_warn(py, "execute_input", "run")?;
+        self.run(py, input)
     }
 
     #[getter]
@@ -445,8 +460,16 @@ impl PyFewShotReAct {
         Ok(Self { inner: agent })
     }
 
-    fn execute_input(&self, input: &str) -> PyResult<String> {
-        crate::run_async(self.inner.execute_input(input)).map_err(to_py_err)
+    /// Run the agent with a text input and return the text response.
+    fn run(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.execute_input(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Deprecated alias for run().
+    fn execute_input(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        crate::deprecation_warn(py, "execute_input", "run")?;
+        self.run(py, input)
     }
 
     #[getter]
@@ -493,8 +516,16 @@ impl PyConversational {
         Ok(Self { inner: agent })
     }
 
-    fn execute_input(&self, input: &str) -> PyResult<String> {
-        crate::run_async(self.inner.execute_input(input)).map_err(to_py_err)
+    /// Run the agent with a text input and return the text response.
+    fn run(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.execute_input(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Deprecated alias for run().
+    fn execute_input(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        crate::deprecation_warn(py, "execute_input", "run")?;
+        self.run(py, input)
     }
 
     #[getter]
@@ -541,8 +572,16 @@ impl PyToolCalling {
         Ok(Self { inner: agent })
     }
 
-    fn execute_input(&self, input: &str) -> PyResult<String> {
-        crate::run_async(self.inner.execute_input(input)).map_err(to_py_err)
+    /// Run the agent with a text input and return the text response.
+    fn run(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.execute_input(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Deprecated alias for run().
+    fn execute_input(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        crate::deprecation_warn(py, "execute_input", "run")?;
+        self.run(py, input)
     }
 
     #[getter]
@@ -589,8 +628,16 @@ impl PyStructuredChat {
         Ok(Self { inner: agent })
     }
 
-    fn execute_input(&self, input: &str) -> PyResult<String> {
-        crate::run_async(self.inner.execute_input(input)).map_err(to_py_err)
+    /// Run the agent with a text input and return the text response.
+    fn run(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.execute_input(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Deprecated alias for run().
+    fn execute_input(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        crate::deprecation_warn(py, "execute_input", "run")?;
+        self.run(py, input)
     }
 
     #[getter]
@@ -637,8 +684,16 @@ impl PySelfAskWithSearch {
         Ok(Self { inner: agent })
     }
 
-    fn execute_input(&self, input: &str) -> PyResult<String> {
-        crate::run_async(self.inner.execute_input(input)).map_err(to_py_err)
+    /// Run the agent with a text input and return the text response.
+    fn run(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.execute_input(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Deprecated alias for run().
+    fn execute_input(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        crate::deprecation_warn(py, "execute_input", "run")?;
+        self.run(py, input)
     }
 
     #[getter]
@@ -685,8 +740,16 @@ impl PyReactDocstore {
         Ok(Self { inner: agent })
     }
 
-    fn execute_input(&self, input: &str) -> PyResult<String> {
-        crate::run_async(self.inner.execute_input(input)).map_err(to_py_err)
+    /// Run the agent with a text input and return the text response.
+    fn run(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.execute_input(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Deprecated alias for run().
+    fn execute_input(&self, py: Python<'_>, input: &str) -> PyResult<String> {
+        crate::deprecation_warn(py, "execute_input", "run")?;
+        self.run(py, input)
     }
 
     #[getter]
