@@ -43,6 +43,8 @@ Examples:
         agent = from_config_path("agent.yaml")
 """
 
+from __future__ import annotations
+
 from typing import Callable
 
 from flowgentra_ai._native import agent as _a, advanced as _adv, utils as _u
@@ -164,7 +166,7 @@ class Conversational:
 
 # ── Config-driven loading ─────────────────────────────────────────────────────
 
-def from_config_path(config_path: str):
+def from_config_path(config_path: str, *, allow_python_handlers: bool | None = None):
     """Create an agent from a YAML config file.
 
     Supports a ``skills:`` block for two-phase skill routing::
@@ -184,8 +186,18 @@ def from_config_path(config_path: str):
     Without a ``skills:`` block the config is processed by the Rust engine
     (which supports Python handler modules and all graph-based config options).
 
+    .. warning::
+        Configs can name Python modules (``python_handler_module``,
+        ``handler: python.module:function``, ``tools: - module: ...``) that are
+        **imported — which executes their code** — when the agent is created.
+        A config file is as powerful as a script: only load configs you trust.
+
     Args:
         config_path: Path to the YAML config file.
+        allow_python_handlers: Pass ``True`` to acknowledge that modules named
+            by this config may be imported and executed; ``False`` to reject
+            configs containing such directives. Leaving it unset warns and
+            proceeds (the default will flip to rejecting in a future release).
 
     Returns:
         An agent instance — either a ``SkillAgent`` (when ``skills:`` is
@@ -196,7 +208,9 @@ def from_config_path(config_path: str):
 
     # Fast path: no skills block — delegate entirely to Rust
     if "skills:" not in raw:
-        return _u.py_from_config_path(config_path)
+        return _u.py_from_config_path(
+            config_path, allow_python_handlers=allow_python_handlers
+        )
 
     try:
         import yaml
@@ -210,14 +224,32 @@ def from_config_path(config_path: str):
 
     # Double-check: 'skills:' might have appeared inside a string/comment
     if "skills" not in config:
-        return _u.py_from_config_path(config_path)
+        return _u.py_from_config_path(
+            config_path, allow_python_handlers=allow_python_handlers
+        )
 
     # ── Build global tool registry ────────────────────────────────────────────
     from flowgentra_ai.tools import ToolRegistry
     import importlib
+    import warnings as _warnings
 
     tool_registry = ToolRegistry.with_builtins()
-    for tool_cfg in config.get("tools", []) or []:
+    tool_cfgs = config.get("tools", []) or []
+    if tool_cfgs:
+        if allow_python_handlers is False:
+            raise ValueError(
+                f"Config {config_path!r} names tool modules to import, but "
+                "allow_python_handlers=False. Importing tool modules executes "
+                "their code; pass allow_python_handlers=True if you trust this config."
+            )
+        if allow_python_handlers is None:
+            _warnings.warn(
+                f"Config {config_path!r} names tool modules that are IMPORTED and "
+                "EXECUTED when the agent is created. Only load config files you "
+                "trust. Pass allow_python_handlers=True to silence this warning, "
+                "or False to reject such configs."
+            )
+    for tool_cfg in tool_cfgs:
         mod = importlib.import_module(tool_cfg["module"])
         for func_name in tool_cfg.get("names", []):
             tool_registry.register(getattr(mod, func_name))

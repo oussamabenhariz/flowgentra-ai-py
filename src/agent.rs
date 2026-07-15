@@ -220,8 +220,21 @@ impl PyAgent {
     ///
     /// Both approaches can be mixed. Rust handlers registered with `#[register_handler]`
     /// continue to work as before.
+    ///
+    /// Security — `allow_python_handlers`:
+    ///     Importing handler modules named by the config EXECUTES CODE from
+    ///     those modules. A config file is therefore as powerful as a script.
+    ///     Pass `allow_python_handlers=True` to acknowledge this for configs
+    ///     you trust, or `False` to reject configs containing Python handler
+    ///     directives. Leaving it unset currently warns and proceeds (the
+    ///     default will flip to rejecting in a future release).
     #[staticmethod]
-    fn from_config_path(py: Python<'_>, config_path: &str) -> PyResult<Self> {
+    #[pyo3(signature = (config_path, *, allow_python_handlers=None))]
+    fn from_config_path(
+        py: Python<'_>,
+        config_path: &str,
+        allow_python_handlers: Option<bool>,
+    ) -> PyResult<Self> {
         // ── Step 1: Parse YAML to find Python-specific config ──────────────────
         let yaml_content = std::fs::read_to_string(config_path).map_err(|e| {
             pyo3::exceptions::PyIOError::new_err(format!(
@@ -234,14 +247,62 @@ impl PyAgent {
             ConfigurationError::new_err(format!("Invalid YAML in '{}': {}", config_path, e))
         })?;
 
-        // ── Step 2: Collect Python handlers ───────────────────────────────────
+        // ── Step 2: Determine whether the config asks for Python code loading ──
+        let handler_module = yaml_val
+            .get("python_handler_module")
+            .and_then(|v| v.as_str());
+
+        let has_python_specs = yaml_val
+            .get("graph")
+            .and_then(|g| g.get("nodes"))
+            .and_then(|n| n.as_sequence())
+            .map(|nodes| {
+                nodes.iter().any(|node| {
+                    node.get("handler")
+                        .and_then(|h| h.as_str())
+                        .is_some_and(|h| h.starts_with("python."))
+                })
+            })
+            .unwrap_or(false);
+
+        let wants_code_loading = handler_module.is_some() || has_python_specs;
+
+        if wants_code_loading {
+            match allow_python_handlers {
+                Some(true) => {}
+                Some(false) => {
+                    return Err(ValidationError::new_err(format!(
+                        "Config '{}' names Python handler modules, but allow_python_handlers=False. \
+                         Importing handler modules executes their code. Remove the \
+                         python_handler_module / 'python.module:function' entries, or pass \
+                         allow_python_handlers=True if you trust this config file.",
+                        config_path
+                    )));
+                }
+                None => {
+                    // Compat: warn loudly, then proceed. The default flips to
+                    // rejection in a future release.
+                    let warnings = py.import_bound("warnings")?;
+                    warnings.call_method1(
+                        "warn",
+                        (format!(
+                            "Config '{}' names Python handler modules, which are IMPORTED and \
+                             EXECUTED when the agent is created. Only load config files you trust. \
+                             Pass allow_python_handlers=True to silence this warning, or False to \
+                             reject such configs. A future release will refuse to import handlers \
+                             unless explicitly allowed.",
+                            config_path
+                        ),),
+                    )?;
+                }
+            }
+        }
+
+        // ── Step 3: Collect Python handlers ───────────────────────────────────
         let mut python_callables: HashMap<String, PyObject> = HashMap::new();
 
         // Option A: python_handler_module — scan module for @register_handler functions
-        if let Some(module_name) = yaml_val
-            .get("python_handler_module")
-            .and_then(|v| v.as_str())
-        {
+        if let Some(module_name) = handler_module {
             let discovered = scan_module_for_handlers(py, module_name)?;
             python_callables.extend(discovered);
         }
@@ -269,13 +330,13 @@ impl PyAgent {
             }
         }
 
-        // ── Step 3: Wrap Python callables as Rust ArcHandlers ─────────────────
+        // ── Step 4: Wrap Python callables as Rust ArcHandlers ─────────────────
         let extra_handlers: HashMap<String, ArcHandler<DynState>> = python_callables
             .into_iter()
             .map(|(name, func)| (name, wrap_python_callable(func)))
             .collect();
 
-        // ── Step 4: Build agent with merged handler registry ──────────────────
+        // ── Step 5: Build agent with merged handler registry ──────────────────
         let agent =
             from_config_path_with_extra_handlers(config_path, extra_handlers).map_err(to_py_err)?;
 
@@ -390,7 +451,14 @@ impl PyAgent {
 // ─── Free function ──────────────────────────────────────────────────────────
 
 /// Create an agent from a YAML config file with auto-discovered handlers.
+///
+/// See Agent.from_config_path for the `allow_python_handlers` security gate.
 #[pyfunction]
-pub fn py_from_config_path(py: Python<'_>, config_path: &str) -> PyResult<PyAgent> {
-    PyAgent::from_config_path(py, config_path)
+#[pyo3(signature = (config_path, *, allow_python_handlers=None))]
+pub fn py_from_config_path(
+    py: Python<'_>,
+    config_path: &str,
+    allow_python_handlers: Option<bool>,
+) -> PyResult<PyAgent> {
+    PyAgent::from_config_path(py, config_path, allow_python_handlers)
 }

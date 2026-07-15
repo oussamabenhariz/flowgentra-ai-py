@@ -62,9 +62,16 @@ impl PyMemoryAwareAgent {
     /// Create from a YAML config file.
     ///
     /// Supports Python handlers via `python_handler_module` in config YAML +
-    /// `@register_handler` decorator — same mechanism as `Agent.from_config_path()`.
+    /// `@register_handler` decorator — same mechanism as `Agent.from_config_path()`,
+    /// including the `allow_python_handlers` security gate (importing handler
+    /// modules executes their code; only load configs you trust).
     #[staticmethod]
-    fn from_config(py: Python<'_>, config_path: &str) -> PyResult<Self> {
+    #[pyo3(signature = (config_path, *, allow_python_handlers=None))]
+    fn from_config(
+        py: Python<'_>,
+        config_path: &str,
+        allow_python_handlers: Option<bool>,
+    ) -> PyResult<Self> {
         // Parse YAML to find python_handler_module
         let yaml_content = std::fs::read_to_string(config_path).map_err(|e| {
             pyo3::exceptions::PyIOError::new_err(format!(
@@ -86,6 +93,30 @@ impl PyMemoryAwareAgent {
             .get("python_handler_module")
             .and_then(|v| v.as_str())
         {
+            match allow_python_handlers {
+                Some(true) => {}
+                Some(false) => {
+                    return Err(crate::error::ValidationError::new_err(format!(
+                        "Config '{}' names python_handler_module '{}', but \
+                         allow_python_handlers=False. Importing handler modules executes \
+                         their code; pass allow_python_handlers=True if you trust this config.",
+                        config_path, module_name
+                    )));
+                }
+                None => {
+                    let warnings = py.import_bound("warnings")?;
+                    warnings.call_method1(
+                        "warn",
+                        (format!(
+                            "Config '{}' names python_handler_module '{}', which is IMPORTED \
+                             and EXECUTED when the agent is created. Only load config files you \
+                             trust. Pass allow_python_handlers=True to silence this warning, or \
+                             False to reject such configs.",
+                            config_path, module_name
+                        ),),
+                    )?;
+                }
+            }
             let discovered = scan_module_for_handlers(py, module_name)?;
             python_callables.extend(discovered);
         }
@@ -121,9 +152,14 @@ impl PyMemoryAwareAgent {
     ///
     /// Returns:
     ///     The agent's response string
-    fn run_turn(&mut self, input: &str) -> PyResult<String> {
-        let result = crate::run_async(self.inner.run_turn(input)).map_err(to_py_err)?;
-        Ok(result)
+    fn run_turn(&mut self, py: Python<'_>, input: &str) -> PyResult<String> {
+        let fut = self.inner.run_turn(input);
+        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+    }
+
+    /// Alias for run_turn — unified `run` vocabulary across agent types.
+    fn run(&mut self, py: Python<'_>, input: &str) -> PyResult<String> {
+        self.run_turn(py, input)
     }
 
     /// Clear conversation memory for the current thread.
