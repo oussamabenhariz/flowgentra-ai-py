@@ -22,7 +22,7 @@ redis-store = []
 neo4j-store = []
 
 [dependencies]
-flowgentra-ai = { version = "0.2.5", features = [
+flowgentra-ai = { version = "0.2.5", path = "../flowgentra-ai-rs/flowgentra-ai", features = [
     "sqlite", "postgres", "mysql", "mssql",
     "mongodb-store", "redis-store", "neo4j-store", "cassandra-store", "elasticsearch-store",
     "pgvector-store", "redis-vector", "elasticsearch-vector",
