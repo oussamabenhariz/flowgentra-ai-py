@@ -21,6 +21,18 @@ pub struct PyTokenUsage {
 
 #[pymethods]
 impl PyTokenUsage {
+    /// Create a usage record from prompt and completion token counts.
+    ///
+    /// Example:
+    ///     usage = TokenUsage(1000, 500)
+    ///     cost = usage.estimated_cost("gpt-4o")
+    #[new]
+    fn new(prompt_tokens: u64, completion_tokens: u64) -> Self {
+        PyTokenUsage {
+            inner: TokenUsage::new(prompt_tokens, completion_tokens),
+        }
+    }
+
     #[getter]
     fn get_prompt_tokens(&self) -> u64 {
         self.inner.prompt_tokens

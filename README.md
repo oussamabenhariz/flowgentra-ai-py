@@ -277,7 +277,7 @@ from flowgentra_ai.types import chunk_text, extract_text, estimate_tokens
 
 # Text utilities
 chunks = chunk_text("long text...", chunk_size=500, overlap=50)
-text = extract_text("document.pdf")
+text = extract_text("document.pdf")  # needs an actual file on disk
 tokens = estimate_tokens("some text")
 
 # Vector store + retrieval
@@ -347,8 +347,11 @@ builder.interrupt_before("publish")  # pause before publishing
 builder.set_checkpointer("./checkpoints")
 graph = builder.compile()
 
-# First run -- pauses before "publish"
-result = graph.invoke_with_thread("thread-1", {"topic": "AI", "draft": "", "approved": False})
+# First run -- raises AgentExecutionError at the breakpoint before "publish"
+try:
+    graph.invoke_with_thread("thread-1", {"topic": "AI", "draft": "", "approved": False})
+except Exception:
+    pass  # paused at the breakpoint; state is checkpointed under "thread-1"
 
 # Human reviews, then resumes
 result = graph.resume("thread-1")
