@@ -213,6 +213,10 @@ pub fn to_py_err_state_graph(e: StateGraphError) -> PyErr {
         StateGraphError::ExecutionError { .. }
         | StateGraphError::InterruptedAtBreakpoint { .. }
         | StateGraphError::ResumeFailed(_) => AgentExecutionError::new_err(msg),
+        StateGraphError::WallClockExceeded { .. } => WorkflowTimeoutError::new_err(msg),
+        StateGraphError::Cancelled { .. } => {
+            pyo3::exceptions::PyInterruptedError::new_err(msg)
+        }
     }
 }
 

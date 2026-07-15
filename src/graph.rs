@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use flowgentra_ai::core::middleware::Middleware;
-use flowgentra_ai::core::observability::events::EventBroadcaster;
+use flowgentra_ai::core::observability::events::{EventBroadcaster, ExecutionEvent};
 use flowgentra_ai::core::state::{Context, DynState, DynStateUpdate};
 use flowgentra_ai::core::state_graph::{
     edge::END, node::Node, FileCheckpointer, StateGraph, StateGraphBuilder, StateGraphError,
@@ -480,6 +480,7 @@ pub struct PyStateGraphBuilder {
     conditional_edges: Vec<(String, PyObject)>,
     entry_point: Option<String>,
     max_steps: usize,
+    max_duration: Option<std::time::Duration>,
     interrupt_before: Vec<String>,
     interrupt_after: Vec<String>,
     subgraphs: Vec<(String, Arc<StateGraph<DynState>>)>,
@@ -522,6 +523,7 @@ impl PyStateGraphBuilder {
             conditional_edges: Vec::new(),
             entry_point: None,
             max_steps: 1000,
+            max_duration: None,
             interrupt_before: Vec::new(),
             interrupt_after: Vec::new(),
             subgraphs: Vec::new(),
@@ -563,6 +565,18 @@ impl PyStateGraphBuilder {
     /// - Returns: name of the next node, or `"__end__"` / END
     fn add_conditional_edge(&mut self, from: &str, router: PyObject) {
         self.conditional_edges.push((from.to_string(), router));
+    }
+
+    /// Alias for add_conditional_edge — matches LangGraph's plural spelling,
+    /// easing migration.
+    fn add_conditional_edges(&mut self, from: &str, router: PyObject) {
+        self.add_conditional_edge(from, router);
+    }
+
+    /// Set a wall-clock budget in seconds for a single invocation.
+    /// Checked between nodes; breach raises WorkflowTimeoutError.
+    fn set_max_duration(&mut self, seconds: f64) {
+        self.max_duration = Some(std::time::Duration::from_secs_f64(seconds));
     }
 
     /// Set the entry point node (first node executed).
@@ -909,6 +923,9 @@ impl PyStateGraphBuilder {
         }
 
         builder = builder.set_max_steps(self.max_steps);
+        if let Some(d) = self.max_duration {
+            builder = builder.set_max_duration(d);
+        }
 
         for name in &self.interrupt_before {
             builder = builder.interrupt_before(name.clone());
@@ -943,12 +960,18 @@ impl PyStateGraphBuilder {
             builder = builder.set_broadcaster(bc.clone());
         }
 
+        // Cooperative cancellation flag — set on Ctrl+C by the signal-aware
+        // invoke runner; the executor checks it between nodes.
+        let cancel_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        builder = builder.set_cancel_flag(Arc::clone(&cancel_flag));
+
         let graph = builder
             .compile()
             .map_err(|e| crate::error::InternalError::new_err(format!("{}", e)))?;
 
         Ok(PyCompiledGraph {
             inner: Arc::new(graph),
+            cancel_flag,
             schema_fields: self.schema_fields.clone(),
             schema_set: self.schema_set.clone(),
             required_fields: self.required_fields.clone(),
@@ -975,10 +998,60 @@ impl PyStateGraphBuilder {
 ///     graph = builder.compile()
 ///     result = graph.invoke({"messages": [], "score": 0.0})
 ///     print(result["messages"])
+/// Run a graph future on the shared runtime while polling for Python signals
+/// (Ctrl+C) on the calling thread. On SIGINT the executor's cancel flag is set,
+/// the run stops at the next node boundary, and KeyboardInterrupt propagates.
+pub(crate) fn run_graph_with_signals<T: Send + 'static>(
+    py: Python<'_>,
+    cancel: &Arc<std::sync::atomic::AtomicBool>,
+    fut: impl std::future::Future<Output = Result<T, StateGraphError>> + Send + 'static,
+) -> PyResult<T> {
+    use std::sync::atomic::Ordering;
+    use std::sync::mpsc::RecvTimeoutError;
+
+    cancel.store(false, Ordering::Relaxed);
+    let (tx, rx) = std::sync::mpsc::channel();
+    // mpsc::Receiver is !Sync; a Mutex wrapper makes the &-capture Ungil-safe
+    // for allow_threads. There is never contention — only this thread reads.
+    let rx = std::sync::Mutex::new(rx);
+    let recv_step = |timeout: Option<std::time::Duration>| match rx.lock() {
+        Ok(guard) => match timeout {
+            Some(t) => guard.recv_timeout(t),
+            None => guard.recv().map_err(|_| RecvTimeoutError::Disconnected),
+        },
+        Err(_) => Err(RecvTimeoutError::Disconnected),
+    };
+    crate::get_runtime().spawn(async move {
+        let _ = tx.send(fut.await);
+    });
+    loop {
+        // Block with the GIL released; wake every 100ms to check signals.
+        match py.allow_threads(|| recv_step(Some(std::time::Duration::from_millis(100)))) {
+            Ok(result) => return result.map_err(sg_err_to_py),
+            Err(RecvTimeoutError::Timeout) => {
+                if let Err(signal_err) = py.check_signals() {
+                    cancel.store(true, Ordering::Relaxed);
+                    // Wait for the executor to stop at the next node boundary
+                    // so no orphaned work keeps running.
+                    let _ = py.allow_threads(|| recv_step(None));
+                    return Err(signal_err);
+                }
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                return Err(crate::error::InternalError::new_err(
+                    "Graph execution task terminated unexpectedly",
+                ));
+            }
+        }
+    }
+}
+
 #[pyclass(name = "CompiledGraph")]
 #[derive(Clone)]
 pub struct PyCompiledGraph {
     pub(crate) inner: Arc<StateGraph<DynState>>,
+    /// Cooperative cancellation flag shared with the executor (Ctrl+C support).
+    pub(crate) cancel_flag: Arc<std::sync::atomic::AtomicBool>,
     pub(crate) schema_fields: Arc<Vec<String>>,
     /// O(1) schema lookup set (issue #16).
     pub(crate) schema_set: Arc<HashSet<String>>,
@@ -1011,10 +1084,10 @@ impl PyCompiledGraph {
     fn invoke(&self, py: Python<'_>, input_dict: &Bound<'_, PyDict>) -> PyResult<PyObject> {
         self.validate_input(input_dict)?;
         let initial = pydict_to_dynstate(input_dict)?;
-        let fut = self.inner.invoke(initial);
-        let result = py
-            .allow_threads(|| crate::run_async(fut))
-            .map_err(sg_err_to_py)?;
+        let graph = Arc::clone(&self.inner);
+        let result = run_graph_with_signals(py, &self.cancel_flag, async move {
+            graph.invoke(initial).await
+        })?;
         self.state_to_output_dict(py, &result)
     }
 
@@ -1027,19 +1100,56 @@ impl PyCompiledGraph {
     ) -> PyResult<PyObject> {
         self.validate_input(input_dict)?;
         let initial = pydict_to_dynstate(input_dict)?;
-        let fut = self.inner.invoke_with_id(thread_id.to_string(), initial);
-        let result = py
-            .allow_threads(|| crate::run_async(fut))
-            .map_err(sg_err_to_py)?;
+        let graph = Arc::clone(&self.inner);
+        let tid = thread_id.to_string();
+        let result = run_graph_with_signals(py, &self.cancel_flag, async move {
+            graph.invoke_with_id(tid, initial).await
+        })?;
         self.state_to_output_dict(py, &result)
+    }
+
+    /// Stream execution events while the graph runs.
+    ///
+    /// Returns an iterator of event dicts. Event types:
+    ///     graph_started, node_started, node_completed, node_failed,
+    ///     edge_traversed, llm_chunk, graph_completed, graph_failed,
+    ///     and a final `values` event carrying the final state dict.
+    ///
+    /// Example:
+    ///     for event in graph.stream({"messages": []}):
+    ///         if event["type"] == "node_completed":
+    ///             print(event["node"], event["duration_ms"])
+    ///         elif event["type"] == "values":
+    ///             final_state = event["state"]
+    ///
+    /// Ctrl+C during iteration cancels the run at the next node boundary.
+    fn stream(&self, input_dict: &Bound<'_, PyDict>) -> PyResult<PyGraphStream> {
+        self.validate_input(input_dict)?;
+        let initial = pydict_to_dynstate(input_dict)?;
+        let graph = Arc::clone(&self.inner);
+        let events = graph.subscribe();
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.cancel_flag
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        crate::get_runtime().spawn(async move {
+            let _ = tx.send(graph.invoke(initial).await);
+        });
+        Ok(PyGraphStream {
+            events: Some(events),
+            result_rx: Some(std::sync::Mutex::new(rx)),
+            cancel_flag: Arc::clone(&self.cancel_flag),
+            schema_fields: Arc::clone(&self.schema_fields),
+            done: false,
+        })
     }
 
     /// Resume a previously interrupted graph from its checkpoint.
     fn resume(&self, py: Python<'_>, thread_id: &str) -> PyResult<PyObject> {
-        let fut = self.inner.resume(thread_id);
-        let result = py
-            .allow_threads(|| crate::run_async(fut))
-            .map_err(sg_err_to_py)?;
+        let graph = Arc::clone(&self.inner);
+        let tid = thread_id.to_string();
+        let result = run_graph_with_signals(py, &self.cancel_flag, async move {
+            graph.resume(&tid).await
+        })?;
         self.state_to_output_dict(py, &result)
     }
 
@@ -1185,6 +1295,216 @@ impl PyCompiledGraph {
             result_dict.set_item(field, crate::json_to_py(py, &val)?)?;
         }
         Ok(result_dict.into())
+    }
+}
+
+// ─── GraphStream ───────────────────────────────────────────────────────────
+
+/// Iterator over live execution events of a running graph.
+///
+/// Returned by CompiledGraph.stream(). Yields event dicts and ends with a
+/// `values` event carrying the final state. Raises the graph's error if
+/// execution fails, and KeyboardInterrupt cancels the run cooperatively.
+#[pyclass(name = "GraphStream")]
+pub struct PyGraphStream {
+    events: Option<tokio::sync::broadcast::Receiver<ExecutionEvent>>,
+    // Mutex-wrapped: mpsc::Receiver is !Sync, and blocking reads happen inside
+    // allow_threads. Only this object's methods ever read it.
+    result_rx: Option<std::sync::Mutex<std::sync::mpsc::Receiver<Result<DynState, StateGraphError>>>>,
+    cancel_flag: Arc<std::sync::atomic::AtomicBool>,
+    schema_fields: Arc<Vec<String>>,
+    done: bool,
+}
+
+impl PyGraphStream {
+    fn event_to_dict(py: Python<'_>, event: &ExecutionEvent) -> PyResult<PyObject> {
+        let d = PyDict::new_bound(py);
+        match event {
+            ExecutionEvent::GraphStarted { graph_id } => {
+                d.set_item("type", "graph_started")?;
+                d.set_item("graph_id", graph_id)?;
+            }
+            ExecutionEvent::NodeStarted { node_name, step } => {
+                d.set_item("type", "node_started")?;
+                d.set_item("node", node_name)?;
+                d.set_item("step", step)?;
+            }
+            ExecutionEvent::NodeCompleted {
+                node_name,
+                step,
+                duration_ms,
+                state_snapshot,
+            } => {
+                d.set_item("type", "node_completed")?;
+                d.set_item("node", node_name)?;
+                d.set_item("step", step)?;
+                d.set_item("duration_ms", duration_ms)?;
+                if let Some(snap) = state_snapshot {
+                    d.set_item("state", crate::json_to_py(py, snap)?)?;
+                }
+            }
+            ExecutionEvent::NodeFailed {
+                node_name,
+                step,
+                error,
+            } => {
+                d.set_item("type", "node_failed")?;
+                d.set_item("node", node_name)?;
+                d.set_item("step", step)?;
+                d.set_item("error", error)?;
+            }
+            ExecutionEvent::EdgeTraversed {
+                from,
+                to,
+                condition,
+            } => {
+                d.set_item("type", "edge_traversed")?;
+                d.set_item("from", from)?;
+                d.set_item("to", to)?;
+                d.set_item("condition", condition.clone())?;
+            }
+            ExecutionEvent::GraphCompleted {
+                total_steps,
+                total_duration_ms,
+            } => {
+                d.set_item("type", "graph_completed")?;
+                d.set_item("total_steps", total_steps)?;
+                d.set_item("total_duration_ms", total_duration_ms)?;
+            }
+            ExecutionEvent::GraphFailed { error, last_node } => {
+                d.set_item("type", "graph_failed")?;
+                d.set_item("error", error)?;
+                d.set_item("last_node", last_node.clone())?;
+            }
+            ExecutionEvent::LLMStreaming {
+                node_name,
+                chunk,
+                chunk_index,
+            } => {
+                d.set_item("type", "llm_chunk")?;
+                d.set_item("node", node_name)?;
+                d.set_item("chunk", chunk)?;
+                d.set_item("chunk_index", chunk_index)?;
+            }
+            ExecutionEvent::LLMStreamingCompleted {
+                node_name,
+                total_chunks,
+            } => {
+                d.set_item("type", "llm_completed")?;
+                d.set_item("node", node_name)?;
+                d.set_item("total_chunks", total_chunks)?;
+            }
+            ExecutionEvent::ToolCalled {
+                node_name,
+                tool_name,
+                args,
+            } => {
+                d.set_item("type", "tool_called")?;
+                d.set_item("node", node_name)?;
+                d.set_item("tool", tool_name)?;
+                d.set_item("args", crate::json_to_py(py, args)?)?;
+            }
+            ExecutionEvent::ToolResult {
+                node_name,
+                tool_name,
+                result,
+                success,
+            } => {
+                d.set_item("type", "tool_result")?;
+                d.set_item("node", node_name)?;
+                d.set_item("tool", tool_name)?;
+                d.set_item("result", crate::json_to_py(py, result)?)?;
+                d.set_item("success", success)?;
+            }
+        }
+        Ok(d.into())
+    }
+
+    /// Fetch the final result, emit the `values` event, and mark the stream done.
+    fn finish(&mut self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+        self.done = true;
+        self.events = None;
+        let Some(rx) = self.result_rx.take() else {
+            return Ok(None);
+        };
+        let result = py
+            .allow_threads(|| rx.lock().map_err(|_| ()).and_then(|g| g.recv().map_err(|_| ())))
+            .map_err(|_| {
+                crate::error::InternalError::new_err(
+                    "Graph execution task terminated unexpectedly",
+                )
+            })?
+            .map_err(sg_err_to_py)?;
+        let d = PyDict::new_bound(py);
+        d.set_item("type", "values")?;
+        let state_dict = PyDict::new_bound(py);
+        for field in self.schema_fields.iter() {
+            let val = result.get(field).unwrap_or(serde_json::Value::Null);
+            state_dict.set_item(field, crate::json_to_py(py, &val)?)?;
+        }
+        d.set_item("state", state_dict)?;
+        Ok(Some(d.into()))
+    }
+}
+
+#[pymethods]
+impl PyGraphStream {
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+        use tokio::sync::broadcast::error::TryRecvError;
+
+        if self.done {
+            return Ok(None);
+        }
+
+        loop {
+            let Some(events) = self.events.as_mut() else {
+                return self.finish(py);
+            };
+            match events.try_recv() {
+                Ok(event) => {
+                    let is_terminal = matches!(
+                        event,
+                        ExecutionEvent::GraphCompleted { .. } | ExecutionEvent::GraphFailed { .. }
+                    );
+                    let dict = Self::event_to_dict(py, &event)?;
+                    if is_terminal {
+                        // Stop listening; the next call returns the final
+                        // `values` event (or raises the graph error).
+                        self.events = None;
+                        if matches!(event, ExecutionEvent::GraphFailed { .. }) {
+                            // Surface the typed error instead of a dict.
+                            return self.finish(py);
+                        }
+                    }
+                    return Ok(Some(dict));
+                }
+                Err(TryRecvError::Empty) => {
+                    // Wait briefly with the GIL released, then check signals.
+                    py.allow_threads(|| std::thread::sleep(std::time::Duration::from_millis(20)));
+                    if let Err(signal_err) = py.check_signals() {
+                        self.cancel_flag
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                        // Drain the result so the run fully stops, then raise.
+                        if let Some(rx) = self.result_rx.take() {
+                            let _ = py.allow_threads(move || {
+                                rx.into_inner().map(|inner| inner.recv()).is_ok()
+                            });
+                        }
+                        self.done = true;
+                        self.events = None;
+                        return Err(signal_err);
+                    }
+                }
+                Err(TryRecvError::Lagged(_)) => continue,
+                Err(TryRecvError::Closed) => {
+                    self.events = None;
+                }
+            }
+        }
     }
 }
 

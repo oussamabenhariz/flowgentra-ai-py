@@ -242,6 +242,20 @@ pub fn run_async<F: std::future::Future>(fut: F) -> F::Output {
     }
 }
 
+/// Emit a Python DeprecationWarning pointing users from `old` to `new`.
+pub(crate) fn deprecation_warn(py: Python<'_>, old: &str, new: &str) -> PyResult<()> {
+    let warnings = py.import_bound("warnings")?;
+    let category = py.import_bound("builtins")?.getattr("DeprecationWarning")?;
+    warnings.call_method1(
+        "warn",
+        (
+            format!("{old}() is deprecated; use {new}() instead"),
+            category,
+        ),
+    )?;
+    Ok(())
+}
+
 // ─── Python Module ──────────────────────────────────────────────────────────
 
 /// FlowgentraAI Python module
@@ -290,6 +304,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let graph_module = PyModule::new_bound(m.py(), "graph")?;
     graph_module.add_class::<PyStateGraphBuilder>()?;
     graph_module.add_class::<PyCompiledGraph>()?;
+    graph_module.add_class::<graph::PyGraphStream>()?;
     graph_module.add("END", graph::PY_END)?;
     m.add_submodule(&graph_module)?;
 
