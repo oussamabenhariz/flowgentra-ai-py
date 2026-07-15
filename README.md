@@ -207,6 +207,20 @@ Strategies: `sequential`, `parallel`, `autonomous`, `dynamic`, `round_robin`, `h
 ### Built-in Node Types
 
 ```python
+from flowgentra_ai.graph import StateGraph
+from typing import TypedDict
+
+class State(TypedDict):
+    query: str
+    response: str
+
+def fetch_fn(state: dict) -> dict: ...
+def slow_fn(state: dict) -> dict: ...
+def refine_fn(state: dict) -> dict: ...
+client = ...  # an LLM instance
+
+builder = StateGraph(State)
+
 # Retry with backoff
 builder.add_retry_node("fetch", fetch_fn, max_retries=3, backoff_ms=1000)
 
@@ -258,8 +272,8 @@ answer2 = agent.run_turn("What are its main features?")  # remembers context
 from flowgentra_ai.rag import (
     Document, Embeddings, InMemoryVectorStore,
     Retriever, RetrievalConfig,
-    chunk_text, extract_text, estimate_tokens,
 )
+from flowgentra_ai.types import chunk_text, extract_text, estimate_tokens
 
 # Text utilities
 chunks = chunk_text("long text...", chunk_size=500, overlap=50)
@@ -300,7 +314,7 @@ agent = ZeroShotReAct(
     tools=[tool],
 )
 
-result = agent.execute_input("What is the weather today?")
+result = agent.run("What is the weather today?")
 print(result)
 ```
 
@@ -316,6 +330,12 @@ class PublishState(TypedDict):
     topic: str
     draft: str
     approved: bool
+
+def draft_fn(state: dict) -> dict:
+    return {"draft": f"An article about {state['topic']}"}
+
+def publish_fn(state: dict) -> dict:
+    return {"approved": True}
 
 builder = StateGraph(PublishState)
 builder.add_node("draft", draft_fn)
@@ -365,7 +385,7 @@ print(result)  # 5
 ### Model Pricing
 
 ```python
-from flowgentra_ai.rag import model_pricing
+from flowgentra_ai.types import model_pricing
 from flowgentra_ai.llm import TokenUsage
 
 pricing = model_pricing("gpt-4")  # (input_price, output_price) per million tokens

@@ -6,13 +6,17 @@ language models with your workflows.
 Examples:
     Create and use an LLM:
 
-        from flowgentra_ai.llm import LLM, LLMConfig, Message
+        from flowgentra_ai.llm import LLM, Message
 
-        config = LLMConfig(model="gpt-4", temperature=0.7)
-        client = LLM(config)
+        client = LLM(provider="openai", model="gpt-4o")  # key from OPENAI_API_KEY
 
-        messages = [Message(role="user", content="Hello")]
-        response = client.call(messages)
+        response = client.chat([Message.user("Hello")])
+        print(response.content)
+
+    Stream tokens as they arrive:
+
+        for chunk in client.chat_stream([Message.user("Tell me a story")]):
+            print(chunk, end="", flush=True)
 """
 
 from flowgentra_ai._native import llm as _l
