@@ -77,11 +77,12 @@ impl PyState {
 
     // ── Read ─────────────────────────────────────────────────────────────────
 
-    /// Get the value for `key`, or `None` if absent.
-    fn get(&self, py: Python<'_>, key: &str) -> PyResult<PyObject> {
+    /// Get the value for `key`, or `default` (None) if absent — dict semantics.
+    #[pyo3(signature = (key, default=None))]
+    fn get(&self, py: Python<'_>, key: &str, default: Option<PyObject>) -> PyResult<PyObject> {
         match self.inner.get(key) {
             Some(v) => json_to_py(py, &v),
-            None => Ok(py.None()),
+            None => Ok(default.unwrap_or_else(|| py.None())),
         }
     }
 
@@ -93,6 +94,56 @@ impl PyState {
     /// All field names.
     fn keys(&self) -> Vec<String> {
         self.inner.keys()
+    }
+
+    /// All values, in the same order as keys().
+    fn values(&self, py: Python<'_>) -> PyResult<Vec<PyObject>> {
+        self.inner
+            .keys()
+            .iter()
+            .map(|k| match self.inner.get(k) {
+                Some(v) => json_to_py(py, &v),
+                None => Ok(py.None()),
+            })
+            .collect()
+    }
+
+    /// All (key, value) pairs, like dict.items().
+    fn items(&self, py: Python<'_>) -> PyResult<Vec<(String, PyObject)>> {
+        self.inner
+            .keys()
+            .into_iter()
+            .map(|k| {
+                let v = match self.inner.get(&k) {
+                    Some(v) => json_to_py(py, &v)?,
+                    None => py.None(),
+                };
+                Ok((k, v))
+            })
+            .collect()
+    }
+
+    /// Merge all entries from a dict into this state (dict.update semantics).
+    fn update(&self, updates: &Bound<'_, PyDict>) -> PyResult<()> {
+        for (k, v) in updates.iter() {
+            let key: String = k.extract()?;
+            let val = py_to_json(&v)?;
+            self.inner.set_raw(key, val);
+        }
+        Ok(())
+    }
+
+    /// Remove `key` and return its value; return `default` if absent, or raise
+    /// KeyError when no default is given — dict.pop semantics.
+    #[pyo3(signature = (key, default=None))]
+    fn pop(&self, py: Python<'_>, key: &str, default: Option<PyObject>) -> PyResult<PyObject> {
+        match self.inner.remove(key) {
+            Some(v) => json_to_py(py, &v),
+            None => match default {
+                Some(d) => Ok(d),
+                None => Err(PyKeyError::new_err(key.to_string())),
+            },
+        }
     }
 
     /// Get a string value or `None`.
@@ -148,8 +199,21 @@ impl PyState {
     }
 
     /// Create a State from a JSON string.
+    ///
+    /// Input is bounded: at most 64 MB of JSON (nesting depth is limited by
+    /// the parser's recursion limit of 128). Loading state from untrusted
+    /// sources cannot exhaust memory via a single oversized document.
     #[staticmethod]
     fn from_json(json_str: &str) -> PyResult<Self> {
+        const MAX_JSON_BYTES: usize = 64 * 1024 * 1024;
+        if json_str.len() > MAX_JSON_BYTES {
+            return Err(SerializationError::new_err(format!(
+                "JSON input is {} bytes, which exceeds the {} MB limit for State.from_json. \
+                 Split the state or load large payloads outside the graph state.",
+                json_str.len(),
+                MAX_JSON_BYTES / (1024 * 1024)
+            )));
+        }
         let value: Value = serde_json::from_str(json_str)
             .map_err(|e| SerializationError::new_err(format!("Invalid JSON: {}", e)))?;
         match value {
@@ -223,6 +287,26 @@ impl PyState {
 
     fn __len__(&self) -> usize {
         self.inner.len()
+    }
+
+    /// Iterate over keys, like a dict.
+    fn __iter__(slf: PyRef<'_, Self>, py: Python<'_>) -> PyResult<PyObject> {
+        let keys = slf.inner.keys();
+        let list = pyo3::types::PyList::new_bound(py, keys);
+        list.as_any().call_method0("__iter__").map(|it| it.into())
+    }
+
+    /// Equality against another State or a plain dict (by contents).
+    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let self_dict = self.to_dict(py)?;
+        if let Ok(other_state) = other.extract::<PyRef<'_, PyState>>() {
+            let other_dict = other_state.to_dict(py)?;
+            return self_dict.bind(py).eq(other_dict.bind(py));
+        }
+        if other.downcast::<PyDict>().is_ok() {
+            return self_dict.bind(py).eq(other);
+        }
+        Ok(false)
     }
 
     fn __repr__(&self) -> String {
