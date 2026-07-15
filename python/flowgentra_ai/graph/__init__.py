@@ -21,13 +21,53 @@ Examples:
         graph = builder.compile()
 """
 
+from __future__ import annotations
+
+import asyncio
+
 from flowgentra_ai._native import graph as _g, nodes as _n
 
 # Re-export compiled types directly.
 CompiledGraph = _g.CompiledGraph
+GraphStream = _g.GraphStream
 END = _g.END
 MessageGraph = _n.MessageGraph
 MessageGraphBuilder = _n.MessageGraphBuilder
+
+
+async def _ainvoke(self, input_dict: dict) -> dict:
+    """Async variant of invoke().
+
+    Runs the (GIL-releasing) synchronous invoke on a worker thread, so the
+    event loop stays responsive and multiple graphs can run concurrently.
+
+    Example:
+        result = await graph.ainvoke({"messages": []})
+    """
+    return await asyncio.to_thread(self.invoke, input_dict)
+
+
+async def _astream(self, input_dict: dict):
+    """Async variant of stream(): an async iterator of event dicts.
+
+    Example:
+        async for event in graph.astream({"messages": []}):
+            print(event["type"])
+    """
+    stream = self.stream(input_dict)
+    sentinel = object()
+    while True:
+        event = await asyncio.to_thread(next, stream, sentinel)
+        if event is sentinel:
+            return
+        yield event
+
+
+# Attach async wrappers to the native class (native classes can't define
+# Python coroutines; asyncio.to_thread over the GIL-releasing sync calls
+# gives true concurrency without an extra runtime dependency).
+CompiledGraph.ainvoke = _ainvoke
+CompiledGraph.astream = _astream
 
 # Default matches the Rust runtime default (config/mod.rs `default_recursion_limit`).
 _DEFAULT_MAX_STEPS: int = 25
@@ -66,6 +106,7 @@ class StateGraph(_g.StateGraph):
 __all__ = [
     "StateGraph",
     "CompiledGraph",
+    "GraphStream",
     "MessageGraph",
     "MessageGraphBuilder",
     "END",
