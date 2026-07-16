@@ -45,6 +45,23 @@ pyo3::create_exception!(_native, WorkflowTimeoutError, FlowgentraAIError);
 pyo3::create_exception!(_native, SerializationError, FlowgentraAIError);
 pyo3::create_exception!(_native, CheckpointError, FlowgentraAIError);
 pyo3::create_exception!(_native, InternalError, FlowgentraAIError);
+pyo3::create_exception!(
+    _native,
+    NodeInterrupt,
+    FlowgentraAIError,
+    "Raised by (or from) a node to pause the graph for human input.
+
+     Raise it inside a node with a payload describing what you need:
+
+         raise NodeInterrupt({\"question\": \"Approve the draft?\"})
+
+     The run pauses, the state at node entry is checkpointed, and the payload
+     is available on the exception (args[0]). Inject the answer and resume:
+
+         graph.resume_with_state(thread_id, {\"approval\": \"yes\"})
+
+     The interrupted node re-runs and should read the answer from state."
+);
 
 /// Register all custom exception types on the given module.
 ///
@@ -87,6 +104,7 @@ pub fn register_exceptions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     m.add("CheckpointError", py.get_type_bound::<CheckpointError>())?;
     m.add("InternalError", py.get_type_bound::<InternalError>())?;
+    m.add("NodeInterrupt", py.get_type_bound::<NodeInterrupt>())?;
     Ok(())
 }
 
@@ -214,6 +232,16 @@ pub fn to_py_err_state_graph(e: StateGraphError) -> PyErr {
         | StateGraphError::InterruptedAtBreakpoint { .. }
         | StateGraphError::ResumeFailed(_) => AgentExecutionError::new_err(msg),
         StateGraphError::WallClockExceeded { .. } => WorkflowTimeoutError::new_err(msg),
+        StateGraphError::InterruptedByNode { payload, .. } => {
+            // Attach the payload as the exception argument so Python can read
+            // exc.args[0] as a dict.
+            pyo3::Python::with_gil(|py| {
+                match crate::json_to_py(py, payload) {
+                    Ok(obj) => NodeInterrupt::new_err((obj,)),
+                    Err(_) => NodeInterrupt::new_err(msg),
+                }
+            })
+        }
         StateGraphError::Cancelled { .. } => {
             pyo3::exceptions::PyInterruptedError::new_err(msg)
         }

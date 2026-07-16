@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 
 from flowgentra_ai._native import graph as _g, nodes as _n
+from flowgentra_ai._native import NodeInterrupt
 
 # Re-export compiled types directly.
 CompiledGraph = _g.CompiledGraph
@@ -107,6 +108,7 @@ __all__ = [
     "StateGraph",
     "CompiledGraph",
     "GraphStream",
+    "NodeInterrupt",
     "MessageGraph",
     "MessageGraphBuilder",
     "END",

@@ -341,7 +341,8 @@ impl Node<DynState> for PyFunctionNode {
         // thread so the Tokio async pool is never stalled by GIL acquisition.
         // This also makes tokio::time::timeout in TimeoutGraphNode effective.
         let result = tokio::task::spawn_blocking(move || {
-            Python::with_gil(|py| -> PyResult<DynStateUpdate> {
+            Python::with_gil(|py| -> Result<DynStateUpdate, StateGraphError> {
+                let inner = |py: Python<'_>| -> PyResult<DynStateUpdate> {
                 // Pass full state as a plain dict
                 let state_dict = dynstate_to_pydict(py, &state_clone)?;
 
@@ -384,6 +385,27 @@ impl Node<DynState> for PyFunctionNode {
                 }
 
                 Ok(update)
+                };
+
+                inner(py).map_err(|e| {
+                    // A NodeInterrupt raised in Python becomes the executor's
+                    // in-node interrupt: the run pauses and can be resumed.
+                    if e.is_instance_of::<crate::error::NodeInterrupt>(py) {
+                        let payload = e
+                            .value_bound(py)
+                            .getattr("args")
+                            .ok()
+                            .and_then(|args| args.get_item(0).ok())
+                            .and_then(|arg| crate::py_to_json(&arg).ok())
+                            .unwrap_or(serde_json::Value::Null);
+                        flowgentra_ai::core::state_graph::interrupt(payload)
+                    } else {
+                        StateGraphError::ExecutionError {
+                            node: node_name.clone(),
+                            reason: format!("Python node error: {}", e),
+                        }
+                    }
+                })
             })
         })
         .await
@@ -392,10 +414,7 @@ impl Node<DynState> for PyFunctionNode {
             reason: format!("Thread join error: {}", e),
         })?;
 
-        result.map_err(|e| StateGraphError::ExecutionError {
-            node: self.name.clone(),
-            reason: format!("Python node error: {}", e),
-        })
+        result
     }
 
     fn name(&self) -> &str {
@@ -485,6 +504,7 @@ pub struct PyStateGraphBuilder {
     interrupt_after: Vec<String>,
     subgraphs: Vec<(String, Arc<StateGraph<DynState>>)>,
     checkpointer_path: Option<String>,
+    checkpointer_sqlite_url: Option<String>,
     middleware: Vec<Arc<dyn Middleware<DynState>>>,
     broadcaster: Option<Arc<EventBroadcaster>>,
 }
@@ -528,6 +548,7 @@ impl PyStateGraphBuilder {
             interrupt_after: Vec::new(),
             subgraphs: Vec::new(),
             checkpointer_path: None,
+            checkpointer_sqlite_url: None,
             middleware: Vec::new(),
             broadcaster: None,
         })
@@ -549,6 +570,41 @@ impl PyStateGraphBuilder {
             channel_schemas: self.channel_schemas.clone(),
         }) as Arc<dyn Node<DynState>>;
         self.nodes.push((name.to_string(), node));
+    }
+
+    /// Add a node whose result is memoized by input-state hash.
+    ///
+    /// Two invocations with identical state skip the second execution — for
+    /// expensive deterministic nodes (LLM calls at temperature 0, retrieval).
+    /// Do not use for nodes with side effects.
+    ///
+    /// Args:
+    ///     max_entries: cache capacity (oldest entry evicted when full)
+    ///     ttl_secs: entry lifetime in seconds; None = no expiry
+    ///
+    /// Example:
+    ///     builder.add_cached_node("retrieve", retrieve_fn, max_entries=256, ttl_secs=600)
+    #[pyo3(signature = (name, func, max_entries=128, ttl_secs=None))]
+    fn add_cached_node(
+        &mut self,
+        name: &str,
+        func: PyObject,
+        max_entries: usize,
+        ttl_secs: Option<f64>,
+    ) {
+        let inner = Arc::new(PyFunctionNode {
+            name: name.to_string(),
+            func,
+            schema_fields: self.schema_fields.clone(),
+            schema_set: self.schema_set.clone(),
+            channel_schemas: self.channel_schemas.clone(),
+        }) as Arc<dyn Node<DynState>>;
+        let cached = Arc::new(flowgentra_ai::core::state_graph::CachedNode::new(
+            inner,
+            max_entries,
+            ttl_secs.map(std::time::Duration::from_secs_f64),
+        )) as Arc<dyn Node<DynState>>;
+        self.nodes.push((name.to_string(), cached));
     }
 
     /// Add a fixed edge: from → to.
@@ -761,6 +817,7 @@ impl PyStateGraphBuilder {
             name: name.to_string(),
             branches: branch_list,
             schema_set: self.schema_set.clone(),
+            channel_schemas: self.channel_schemas.clone(),
         }) as Arc<dyn Node<DynState>>;
         self.nodes.push((name.to_string(), node));
         Ok(())
@@ -788,6 +845,19 @@ impl PyStateGraphBuilder {
     /// Set a file checkpointer for persistent state across invocations.
     fn set_checkpointer(&mut self, base_dir: &str) -> PyResult<()> {
         self.checkpointer_path = Some(base_dir.to_string());
+        Ok(())
+    }
+
+    /// Persist checkpoints in a SQLite database instead of JSON files.
+    ///
+    /// Accepts a sqlx SQLite URL, e.g. "sqlite://checkpoints.db" or
+    /// "sqlite::memory:". The database file is created if missing; writes are
+    /// transactional. Overrides set_checkpointer if both are called.
+    ///
+    /// Example:
+    ///     builder.set_sqlite_checkpointer("sqlite://checkpoints.db")
+    fn set_sqlite_checkpointer(&mut self, url: &str) -> PyResult<()> {
+        self.checkpointer_sqlite_url = Some(url.to_string());
         Ok(())
     }
 
@@ -942,7 +1012,18 @@ impl PyStateGraphBuilder {
             builder = builder.add_node(name.clone(), node);
         }
 
-        if let Some(ref path) = self.checkpointer_path {
+        if let Some(ref url) = self.checkpointer_sqlite_url {
+            let cp = crate::run_async(
+                flowgentra_ai::core::state_graph::SqliteCheckpointer::connect(url),
+            )
+            .map_err(|e| {
+                crate::error::CheckpointError::new_err(format!(
+                    "Failed to open SQLite checkpointer at '{}': {}",
+                    url, e
+                ))
+            })?;
+            builder = builder.set_checkpointer(Arc::new(cp));
+        } else if let Some(ref path) = self.checkpointer_path {
             let cp = FileCheckpointer::new(path).map_err(|e| {
                 crate::error::InternalError::new_err(format!(
                     "Failed to create checkpointer: {}",

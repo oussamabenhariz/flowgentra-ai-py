@@ -595,14 +595,24 @@ impl Node<DynState> for LoopGraphNode {
 
 /// Runs multiple Python callables concurrently as a single graph node.
 ///
-/// All branches receive the same initial state.  Their returned partial updates
-/// are merged with last-write-wins semantics (branches are awaited in declaration
-/// order; later branches override earlier ones for the same key).
+/// All branches receive the same initial state. Branch updates are merged
+/// **per key according to the field's channel reducer**, in declaration order:
+///
+/// - `Topic`/`Append` fields: every branch's contribution is accumulated
+///   (list concatenation on top of the pre-node value).
+/// - `BinaryOperator` fields: the operator folds branch values in order.
+/// - `LastValue` fields (the default): last branch to write a key wins.
+///
+/// This makes concurrent supersteps deterministic and specified instead of
+/// emergent: give a field an accumulating reducer if parallel branches should
+/// combine rather than overwrite.
 pub(crate) struct ParallelGraphNode {
     pub name: String,
     /// `(branch_name, callable)` pairs.
     pub branches: Vec<(String, PyObject)>,
     pub schema_set: Arc<HashSet<String>>,
+    /// Per-field reducer strategies from the state class schema.
+    pub channel_schemas: Arc<HashMap<String, crate::channel::ChannelType>>,
 }
 
 #[async_trait::async_trait]
@@ -653,8 +663,10 @@ impl Node<DynState> for ParallelGraphNode {
             handles.push((branch_name.clone(), handle));
         }
 
-        // All blocking tasks are running. Collect results; last-write-wins merge.
-        let mut merged = DynStateUpdate::new();
+        // All blocking tasks are running. Collect results and merge per key
+        // using the field's channel reducer (deterministic declaration order).
+        use crate::channel::{apply_channel_reducer, ChannelType};
+        let mut accumulated: HashMap<String, serde_json::Value> = HashMap::new();
         for (branch_name, handle) in handles {
             let result = handle
                 .await
@@ -668,10 +680,31 @@ impl Node<DynState> for ParallelGraphNode {
                 })?;
 
             for (k, v) in result {
-                merged.insert(k, v);
+                let channel = self
+                    .channel_schemas
+                    .get(&k)
+                    .unwrap_or(&ChannelType::LastValue);
+                let new_val = match channel {
+                    ChannelType::LastValue => v,
+                    _ => {
+                        // Fold onto what earlier branches produced, seeded with
+                        // the pre-node state value.
+                        let current = accumulated
+                            .get(&k)
+                            .cloned()
+                            .or_else(|| state.get(&k))
+                            .unwrap_or(serde_json::Value::Null);
+                        apply_channel_reducer(current, v, channel)
+                    }
+                };
+                accumulated.insert(k, new_val);
             }
         }
 
+        let mut merged = DynStateUpdate::new();
+        for (k, v) in accumulated {
+            merged.insert(k, v);
+        }
         Ok(merged)
     }
 

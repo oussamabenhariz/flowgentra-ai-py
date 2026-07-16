@@ -82,9 +82,10 @@ from flowgentra_ai.exceptions import (
     SerializationError,
     CheckpointError,
     InternalError,
+    NodeInterrupt,
 )
 
-__version__ = "0.2.6"
+__version__ = "0.3.0"
 
 __all__ = [
     # Core graph
@@ -121,4 +122,5 @@ __all__ = [
     "SerializationError",
     "CheckpointError",
     "InternalError",
+    "NodeInterrupt",
 ]

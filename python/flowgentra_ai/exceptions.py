@@ -20,7 +20,8 @@ Hierarchy::
         ├── WorkflowTimeoutError   execution timeout
         ├── SerializationError     JSON / serialization failures
         ├── CheckpointError        state persistence failures
-        └── InternalError          unexpected internal failures
+        ├── InternalError          unexpected internal failures
+        └── NodeInterrupt          node paused for human input (HITL)
 
 Note: :class:`OSError` is still raised directly for low-level file / network
 I/O errors (``IoError`` on the Rust side) to preserve standard Python semantics.
@@ -57,6 +58,7 @@ from flowgentra_ai._native import (  # type: ignore[import]
     SerializationError,
     CheckpointError,
     InternalError,
+    NodeInterrupt,
 )
 
 __all__ = [
@@ -74,4 +76,5 @@ __all__ = [
     "SerializationError",
     "CheckpointError",
     "InternalError",
+    "NodeInterrupt",
 ]
