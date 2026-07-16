@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: build + pytest (${{ matrix.os }}, py${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: flowgentra-ai-py
+      # The bindings use a path dependency on the core repo.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/flowgentra-ai-rs
+          path: flowgentra-ai-rs
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: flowgentra-ai-py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Build and install wheel
+        working-directory: flowgentra-ai-py
+        run: |
+          pip install maturin pytest
+          maturin build --release -o dist-ci
+          pip install --no-index --find-links dist-ci flowgentra-ai
+      - name: Import check
+        run: python -c "import flowgentra_ai; from flowgentra_ai.graph import StateGraph, END; print(flowgentra_ai.__version__)"
+      - name: pytest
+        working-directory: flowgentra-ai-py
+        run: python -m pytest tests -q
+      - name: README examples
+        working-directory: flowgentra-ai-py
+        run: python scripts/check_readme.py
+
+  audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit && pip-audit --requirement /dev/null || true
+      # Note: the package has no runtime Python deps; this job exists so a
+      # future requirements file is automatically audited.
