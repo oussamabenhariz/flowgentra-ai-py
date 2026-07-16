@@ -47,6 +47,9 @@ jobs:
       - name: README examples
         working-directory: flowgentra-ai-py
         run: python scripts/check_readme.py
+      - name: Stub coverage
+        working-directory: flowgentra-ai-py
+        run: python scripts/check_stubs.py --min-coverage 0.95
 
   audit:
     name: pip-audit

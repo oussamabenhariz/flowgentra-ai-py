@@ -21,6 +21,10 @@ All notable changes to the `flowgentra-ai` Python package. Format follows
   variable.
 
 ### Added
+- `StateGraph.set_max_tokens(n)` — total-token budget.
+- Stub coverage raised to 100% (scripts/check_stubs.py gate + gen_stubs.py);
+  py.typed already shipped.
+- RAG/embeddings config API keys no longer written into checkpoints.
 - **Ctrl+C works**: `KeyboardInterrupt` cancels a running graph at the next
   node boundary instead of hanging until completion.
 - `CompiledGraph.stream(input)` — iterate live execution events
