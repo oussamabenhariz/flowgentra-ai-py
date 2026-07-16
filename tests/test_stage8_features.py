@@ -2,11 +2,13 @@
 per-key parallel merge, OTel export."""
 
 import json
+import operator
 from typing import Annotated, List, TypedDict
 
 import pytest
 
 from flowgentra_ai.graph import StateGraph, END, NodeInterrupt
+from flowgentra_ai.exceptions import WorkflowTimeoutError
 
 
 class PubState(TypedDict):
@@ -195,3 +197,40 @@ def test_trace_converts_to_otlp_spans():
 
     payload = spans_to_otlp_json(spans)
     assert "resourceSpans" in payload
+
+
+# ── Token budget ──────────────────────────────────────────────────────────────
+
+class BudgetState(TypedDict):
+    _token_usage: dict
+    log: Annotated[List[str], operator.add]
+
+
+def test_token_budget_breach_raises():
+    def burn(s):
+        prior = (s.get("_token_usage") or {}).get("total_tokens", 0)
+        return {"_token_usage": {"total_tokens": prior + 100}, "log": ["burn"]}
+
+    b = StateGraph(BudgetState)
+    b.add_node("burn", burn)
+    b.set_entry_point("burn")
+    b.add_conditional_edges("burn", lambda s: "burn")  # loop
+    b.set_max_tokens(250)
+    g = b.compile()
+    with pytest.raises(WorkflowTimeoutError, match="token budget"):
+        g.invoke({"_token_usage": {}, "log": []})
+
+
+def test_token_budget_noop_without_usage():
+    def once(s):
+        return {**s, "log": s["log"] + ["once"]}
+
+    b = StateGraph(BudgetState)
+    b.add_node("once", once)
+    b.set_entry_point("once")
+    b.add_edge("once", END)
+    b.set_max_tokens(10)  # never recorded → no-op
+    g = b.compile()
+    result = g.invoke({"_token_usage": {}, "log": []})
+    assert result["log"] == ["once"]
+
