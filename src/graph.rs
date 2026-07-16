@@ -500,6 +500,7 @@ pub struct PyStateGraphBuilder {
     entry_point: Option<String>,
     max_steps: usize,
     max_duration: Option<std::time::Duration>,
+    max_tokens: Option<u64>,
     interrupt_before: Vec<String>,
     interrupt_after: Vec<String>,
     subgraphs: Vec<(String, Arc<StateGraph<DynState>>)>,
@@ -544,6 +545,7 @@ impl PyStateGraphBuilder {
             entry_point: None,
             max_steps: 1000,
             max_duration: None,
+            max_tokens: None,
             interrupt_before: Vec::new(),
             interrupt_after: Vec::new(),
             subgraphs: Vec::new(),
@@ -610,6 +612,12 @@ impl PyStateGraphBuilder {
     /// Add a fixed edge: from → to.
     ///
     /// Use `END` (or `"__end__"`) as `to` to terminate execution.
+    ///
+    /// Note: for concurrent branches that merge by reducer, prefer
+    /// `add_parallel_node` — it isolates branch state correctly. Multiple
+    /// fixed edges from a single node do fan out on the core executor, but the
+    /// Python state (`DynState`) pre-applies field reducers inside each node,
+    /// which can double-count accumulating reducers across a fan-out merge.
     fn add_edge(&mut self, from: &str, to: &str) {
         self.edges.push((from.to_string(), to.to_string()));
     }
@@ -633,6 +641,13 @@ impl PyStateGraphBuilder {
     /// Checked between nodes; breach raises WorkflowTimeoutError.
     fn set_max_duration(&mut self, seconds: f64) {
         self.max_duration = Some(std::time::Duration::from_secs_f64(seconds));
+    }
+
+    /// Set a total-token budget for a single invocation. Checked between nodes
+    /// against the cumulative `_token_usage.total_tokens` state field that LLM
+    /// nodes populate; breach raises WorkflowTimeoutError.
+    fn set_max_tokens(&mut self, max_tokens: u64) {
+        self.max_tokens = Some(max_tokens);
     }
 
     /// Set the entry point node (first node executed).
@@ -995,6 +1010,9 @@ impl PyStateGraphBuilder {
         builder = builder.set_max_steps(self.max_steps);
         if let Some(d) = self.max_duration {
             builder = builder.set_max_duration(d);
+        }
+        if let Some(t) = self.max_tokens {
+            builder = builder.set_max_tokens(t);
         }
 
         for name in &self.interrupt_before {
