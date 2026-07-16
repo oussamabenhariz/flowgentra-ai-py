@@ -195,9 +195,9 @@ def from_config_path(config_path: str, *, allow_python_handlers: bool | None = N
     Args:
         config_path: Path to the YAML config file.
         allow_python_handlers: Pass ``True`` to acknowledge that modules named
-            by this config may be imported and executed; ``False`` to reject
-            configs containing such directives. Leaving it unset warns and
-            proceeds (the default will flip to rejecting in a future release).
+            by this config may be imported and executed. Since 0.3.0 the
+            default REJECTS configs containing such directives (0.2.x warned
+            and proceeded).
 
     Returns:
         An agent instance — either a ``SkillAgent`` (when ``skills:`` is
@@ -231,24 +231,17 @@ def from_config_path(config_path: str, *, allow_python_handlers: bool | None = N
     # ── Build global tool registry ────────────────────────────────────────────
     from flowgentra_ai.tools import ToolRegistry
     import importlib
-    import warnings as _warnings
 
     tool_registry = ToolRegistry.with_builtins()
     tool_cfgs = config.get("tools", []) or []
-    if tool_cfgs:
-        if allow_python_handlers is False:
-            raise ValueError(
-                f"Config {config_path!r} names tool modules to import, but "
-                "allow_python_handlers=False. Importing tool modules executes "
-                "their code; pass allow_python_handlers=True if you trust this config."
-            )
-        if allow_python_handlers is None:
-            _warnings.warn(
-                f"Config {config_path!r} names tool modules that are IMPORTED and "
-                "EXECUTED when the agent is created. Only load config files you "
-                "trust. Pass allow_python_handlers=True to silence this warning, "
-                "or False to reject such configs."
-            )
+    if tool_cfgs and allow_python_handlers is not True:
+        # Since 0.3.0: importing config-named modules requires explicit opt-in.
+        raise ValueError(
+            f"Config {config_path!r} names tool modules that are IMPORTED and "
+            "EXECUTED when the agent is created. Since 0.3.0 this requires "
+            "explicit opt-in: pass allow_python_handlers=True if you trust "
+            "this config file."
+        )
     for tool_cfg in tool_cfgs:
         mod = importlib.import_module(tool_cfg["module"])
         for func_name in tool_cfg.get("names", []):

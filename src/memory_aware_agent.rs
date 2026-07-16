@@ -104,17 +104,13 @@ impl PyMemoryAwareAgent {
                     )));
                 }
                 None => {
-                    let warnings = py.import_bound("warnings")?;
-                    warnings.call_method1(
-                        "warn",
-                        (format!(
-                            "Config '{}' names python_handler_module '{}', which is IMPORTED \
-                             and EXECUTED when the agent is created. Only load config files you \
-                             trust. Pass allow_python_handlers=True to silence this warning, or \
-                             False to reject such configs.",
-                            config_path, module_name
-                        ),),
-                    )?;
+                    // Since 0.3.0: reject by default (explicit opt-in required).
+                    return Err(crate::error::ValidationError::new_err(format!(
+                        "Config '{}' names python_handler_module '{}', which is IMPORTED and \
+                         EXECUTED when the agent is created. Since 0.3.0 this requires explicit \
+                         opt-in: pass allow_python_handlers=True if you trust this config file.",
+                        config_path, module_name
+                    )));
                 }
             }
             let discovered = scan_module_for_handlers(py, module_name)?;

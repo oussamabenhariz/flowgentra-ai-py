@@ -81,12 +81,10 @@ def handler_config(tmp_path, monkeypatch):
     return str(cfg)
 
 
-def test_config_handlers_warn_when_unset(handler_config):
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
+def test_config_handlers_rejected_when_unset(handler_config):
+    """Since 0.3.0 the default rejects handler imports (0.2.x warned)."""
+    with pytest.raises(ex.ValidationError, match="allow_python_handlers"):
         Agent.from_config_path(handler_config)
-    messages = [str(w.message) for w in caught]
-    assert any("IMPORTED" in m and "EXECUTED" in m for m in messages), messages
 
 
 def test_config_handlers_rejected_when_false(handler_config):

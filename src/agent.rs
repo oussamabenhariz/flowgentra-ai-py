@@ -225,9 +225,8 @@ impl PyAgent {
     ///     Importing handler modules named by the config EXECUTES CODE from
     ///     those modules. A config file is therefore as powerful as a script.
     ///     Pass `allow_python_handlers=True` to acknowledge this for configs
-    ///     you trust, or `False` to reject configs containing Python handler
-    ///     directives. Leaving it unset currently warns and proceeds (the
-    ///     default will flip to rejecting in a future release).
+    ///     you trust. Since 0.3.0 the default REJECTS configs containing
+    ///     Python handler directives (0.2.x warned and proceeded).
     #[staticmethod]
     #[pyo3(signature = (config_path, *, allow_python_handlers=None))]
     fn from_config_path(
@@ -280,20 +279,15 @@ impl PyAgent {
                     )));
                 }
                 None => {
-                    // Compat: warn loudly, then proceed. The default flips to
-                    // rejection in a future release.
-                    let warnings = py.import_bound("warnings")?;
-                    warnings.call_method1(
-                        "warn",
-                        (format!(
-                            "Config '{}' names Python handler modules, which are IMPORTED and \
-                             EXECUTED when the agent is created. Only load config files you trust. \
-                             Pass allow_python_handlers=True to silence this warning, or False to \
-                             reject such configs. A future release will refuse to import handlers \
-                             unless explicitly allowed.",
-                            config_path
-                        ),),
-                    )?;
+                    // Since 0.3.0: reject by default. Importing handler modules
+                    // executes their code; require explicit opt-in.
+                    return Err(ValidationError::new_err(format!(
+                        "Config '{}' names Python handler modules, which are IMPORTED and \
+                         EXECUTED when the agent is created. Since 0.3.0 this requires \
+                         explicit opt-in: pass allow_python_handlers=True if you trust \
+                         this config file (0.2.x only warned here).",
+                        config_path
+                    )));
                 }
             }
         }
