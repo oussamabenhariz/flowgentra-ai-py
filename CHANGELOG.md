@@ -4,6 +4,21 @@ All notable changes to the `flowgentra-ai` Python package. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning follows SemVer
 (0.x: minor bumps may break).
 
+## [0.3.1] - 2026-07-17
+
+Tracks `flowgentra-ai` 0.3.1. No Python API changes.
+
+### Changed
+- Config-driven agents (`Agent.from_config_path`, `MemoryAwareAgent.from_config`)
+  now execute on the unified `state_graph` engine in core. This is transparent:
+  every node type behaves as before, by design. The one observable difference is
+  that parallel fan-out merges by per-field reducer in sorted node order rather
+  than by legacy BFS-wave last-write-wins, so a config that (accidentally)
+  depended on wave ordering can produce different output.
+
+### Added
+- End-to-end test running a config-driven agent through the bridge from Python.
+
 ## [0.3.0] - 2026-07-16
 
 ### Security (breaking)
