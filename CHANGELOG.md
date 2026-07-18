@@ -21,7 +21,12 @@ Tracks `flowgentra-ai` 0.3.1. No Python API changes.
   graph runs on the tokio runtime bridged to the asyncio loop, replacing the
   `asyncio.to_thread(invoke)` wrapper — no worker-thread bounce, no per-call
   `block_on` (F-22). Behavior is unchanged for `await g.ainvoke(x)` and
-  `asyncio.run(g.ainvoke(x))`. `astream` still uses `to_thread`.
+  `asyncio.run(g.ainvoke(x))`.
+- `CompiledGraph.astream` is also native: returns `AsyncGraphStream`, whose
+  `__anext__` awaits the next event on the tokio runtime — no per-event thread
+  bounce. Built on the stable `future_into_py` API only (the `unstable-streams`
+  feature is deliberately not enabled); `pyo3-async-runtimes` is exact-pinned
+  at 0.22.0.
 
 ### Added
 - End-to-end test running a config-driven agent through the bridge from Python.
