@@ -150,7 +150,8 @@ impl PyMemoryAwareAgent {
     ///     The agent's response string
     fn run_turn(&mut self, py: Python<'_>, input: &str) -> PyResult<String> {
         let fut = self.inner.run_turn(input);
-        py.allow_threads(|| crate::run_async(fut)).map_err(to_py_err)
+        py.allow_threads(|| crate::run_async(fut))
+            .map_err(to_py_err)
     }
 
     /// Alias for run_turn — unified `run` vocabulary across agent types.

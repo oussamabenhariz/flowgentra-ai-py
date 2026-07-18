@@ -237,16 +237,12 @@ pub fn to_py_err_state_graph(e: StateGraphError) -> PyErr {
         StateGraphError::InterruptedByNode { payload, .. } => {
             // Attach the payload as the exception argument so Python can read
             // exc.args[0] as a dict.
-            pyo3::Python::with_gil(|py| {
-                match crate::json_to_py(py, payload) {
-                    Ok(obj) => NodeInterrupt::new_err((obj,)),
-                    Err(_) => NodeInterrupt::new_err(msg),
-                }
+            pyo3::Python::with_gil(|py| match crate::json_to_py(py, payload) {
+                Ok(obj) => NodeInterrupt::new_err((obj,)),
+                Err(_) => NodeInterrupt::new_err(msg),
             })
         }
-        StateGraphError::Cancelled { .. } => {
-            pyo3::exceptions::PyInterruptedError::new_err(msg)
-        }
+        StateGraphError::Cancelled { .. } => pyo3::exceptions::PyInterruptedError::new_err(msg),
     }
 }
 

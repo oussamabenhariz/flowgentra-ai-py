@@ -343,48 +343,50 @@ impl Node<DynState> for PyFunctionNode {
         let result = tokio::task::spawn_blocking(move || {
             Python::with_gil(|py| -> Result<DynStateUpdate, StateGraphError> {
                 let inner = |py: Python<'_>| -> PyResult<DynStateUpdate> {
-                // Pass full state as a plain dict
-                let state_dict = dynstate_to_pydict(py, &state_clone)?;
+                    // Pass full state as a plain dict
+                    let state_dict = dynstate_to_pydict(py, &state_clone)?;
 
-                // Call Python function
-                let py_result = func.call1(py, (state_dict,))?;
+                    // Call Python function
+                    let py_result = func.call1(py, (state_dict,))?;
 
-                // Expect a plain dict back (partial update)
-                let py_result_bound = py_result.bind(py);
-                let type_name = py_result_bound
-                    .get_type()
-                    .name()
-                    .map(|n| n.to_string())
-                    .unwrap_or_else(|_| "unknown".to_string());
-                let update_dict = py_result_bound.downcast::<PyDict>().map_err(|_| {
-                    pyo3::exceptions::PyTypeError::new_err(format!(
-                        "Node '{}' must return a dict (partial state update), got: {}",
-                        node_name, type_name
-                    ))
-                })?;
+                    // Expect a plain dict back (partial update)
+                    let py_result_bound = py_result.bind(py);
+                    let type_name = py_result_bound
+                        .get_type()
+                        .name()
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|_| "unknown".to_string());
+                    let update_dict = py_result_bound.downcast::<PyDict>().map_err(|_| {
+                        pyo3::exceptions::PyTypeError::new_err(format!(
+                            "Node '{}' must return a dict (partial state update), got: {}",
+                            node_name, type_name
+                        ))
+                    })?;
 
-                // Validate keys against schema — O(1) HashSet lookup (issue #16)
-                validate_update_keys(&node_name, update_dict, &schema_set)?;
+                    // Validate keys against schema — O(1) HashSet lookup (issue #16)
+                    validate_update_keys(&node_name, update_dict, &schema_set)?;
 
-                // Build a DynStateUpdate, applying channel reducers.
-                let mut update = DynStateUpdate::new();
-                for (k, v) in update_dict.iter() {
-                    let key: String = k.extract()?;
-                    let new_val = crate::py_to_json(&v)?;
+                    // Build a DynStateUpdate, applying channel reducers.
+                    let mut update = DynStateUpdate::new();
+                    for (k, v) in update_dict.iter() {
+                        let key: String = k.extract()?;
+                        let new_val = crate::py_to_json(&v)?;
 
-                    let channel_type = channel_schemas.get(&key).unwrap_or(&ChannelType::LastValue);
+                        let channel_type =
+                            channel_schemas.get(&key).unwrap_or(&ChannelType::LastValue);
 
-                    let merged_val = match channel_type {
-                        ChannelType::LastValue => new_val,
-                        _ => {
-                            let current = state_clone.get(&key).unwrap_or(serde_json::Value::Null);
-                            apply_channel_reducer(current, new_val, channel_type)
-                        }
-                    };
-                    update.insert(key, merged_val);
-                }
+                        let merged_val = match channel_type {
+                            ChannelType::LastValue => new_val,
+                            _ => {
+                                let current =
+                                    state_clone.get(&key).unwrap_or(serde_json::Value::Null);
+                                apply_channel_reducer(current, new_val, channel_type)
+                            }
+                        };
+                        update.insert(key, merged_val);
+                    }
 
-                Ok(update)
+                    Ok(update)
                 };
 
                 inner(py).map_err(|e| {
@@ -1197,9 +1199,12 @@ impl PyCompiledGraph {
         self.validate_input(input_dict)?;
         let initial = pydict_to_dynstate(input_dict)?;
         let graph = Arc::clone(&self.inner);
-        let result = run_graph_with_signals(py, &self.cancel_flag, async move {
-            graph.invoke(initial).await
-        })?;
+        let result =
+            run_graph_with_signals(
+                py,
+                &self.cancel_flag,
+                async move { graph.invoke(initial).await },
+            )?;
         self.state_to_output_dict(py, &result)
     }
 
@@ -1259,9 +1264,12 @@ impl PyCompiledGraph {
     fn resume(&self, py: Python<'_>, thread_id: &str) -> PyResult<PyObject> {
         let graph = Arc::clone(&self.inner);
         let tid = thread_id.to_string();
-        let result = run_graph_with_signals(py, &self.cancel_flag, async move {
-            graph.resume(&tid).await
-        })?;
+        let result =
+            run_graph_with_signals(
+                py,
+                &self.cancel_flag,
+                async move { graph.resume(&tid).await },
+            )?;
         self.state_to_output_dict(py, &result)
     }
 
@@ -1422,7 +1430,8 @@ pub struct PyGraphStream {
     events: Option<tokio::sync::broadcast::Receiver<ExecutionEvent>>,
     // Mutex-wrapped: mpsc::Receiver is !Sync, and blocking reads happen inside
     // allow_threads. Only this object's methods ever read it.
-    result_rx: Option<std::sync::Mutex<std::sync::mpsc::Receiver<Result<DynState, StateGraphError>>>>,
+    result_rx:
+        Option<std::sync::Mutex<std::sync::mpsc::Receiver<Result<DynState, StateGraphError>>>>,
     cancel_flag: Arc<std::sync::atomic::AtomicBool>,
     schema_fields: Arc<Vec<String>>,
     done: bool,
@@ -1540,11 +1549,13 @@ impl PyGraphStream {
             return Ok(None);
         };
         let result = py
-            .allow_threads(|| rx.lock().map_err(|_| ()).and_then(|g| g.recv().map_err(|_| ())))
+            .allow_threads(|| {
+                rx.lock()
+                    .map_err(|_| ())
+                    .and_then(|g| g.recv().map_err(|_| ()))
+            })
             .map_err(|_| {
-                crate::error::InternalError::new_err(
-                    "Graph execution task terminated unexpectedly",
-                )
+                crate::error::InternalError::new_err("Graph execution task terminated unexpectedly")
             })?
             .map_err(sg_err_to_py)?;
         let d = PyDict::new_bound(py);
