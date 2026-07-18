@@ -39,13 +39,16 @@ MessageGraphBuilder = _n.MessageGraphBuilder
 async def _ainvoke(self, input_dict: dict) -> dict:
     """Async variant of invoke().
 
-    Runs the (GIL-releasing) synchronous invoke on a worker thread, so the
-    event loop stays responsive and multiple graphs can run concurrently.
+    Drives the graph on the tokio runtime via a native awaitable
+    (pyo3-async-runtimes) — no worker-thread bounce and no per-call block_on.
+    This ``async def`` wrapper defers the native call until it runs inside the
+    awaiting event loop, so both ``await g.ainvoke(x)`` and
+    ``asyncio.run(g.ainvoke(x))`` work.
 
     Example:
         result = await graph.ainvoke({"messages": []})
     """
-    return await asyncio.to_thread(self.invoke, input_dict)
+    return await self._ainvoke_native(input_dict)
 
 
 async def _astream(self, input_dict: dict):
@@ -64,9 +67,10 @@ async def _astream(self, input_dict: dict):
         yield event
 
 
-# Attach async wrappers to the native class (native classes can't define
-# Python coroutines; asyncio.to_thread over the GIL-releasing sync calls
-# gives true concurrency without an extra runtime dependency).
+# `ainvoke` wraps the native `_ainvoke_native` awaitable in an `async def` so
+# the native future is created inside the running loop (see _ainvoke). `astream`
+# stays a thin async generator over the GIL-releasing sync stream (pull-based; a
+# native async generator would need pyo3-async-runtimes' unstable-streams).
 CompiledGraph.ainvoke = _ainvoke
 CompiledGraph.astream = _astream
 

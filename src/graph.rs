@@ -1208,6 +1208,45 @@ impl PyCompiledGraph {
         self.state_to_output_dict(py, &result)
     }
 
+    /// Async variant of invoke(): returns a native awaitable driven by the
+    /// tokio runtime and bridged to the running asyncio loop.
+    ///
+    /// Unlike the previous `asyncio.to_thread(invoke)` wrapper, the graph
+    /// future runs directly on the runtime — no worker-thread bounce and no
+    /// per-call `block_on` (audit F-22). Python node bodies still execute under
+    /// the GIL, offloaded via `spawn_blocking` inside the executor, so the
+    /// event loop stays responsive and many graphs can run concurrently.
+    ///
+    /// Cancellation follows asyncio semantics (cancel the awaiting task); the
+    /// synchronous `invoke` remains the path that polls OS signals for Ctrl+C.
+    ///
+    /// This is the native half; the public `ainvoke` is a thin Python
+    /// `async def` wrapper (graph/__init__.py). The wrapper matters: it defers
+    /// this call until it runs *inside* the awaiting loop, so
+    /// `asyncio.run(g.ainvoke(x))` — which evaluates the argument before the
+    /// loop starts — still works. Calling this directly requires a running loop.
+    fn _ainvoke_native<'py>(
+        &self,
+        py: Python<'py>,
+        input_dict: &Bound<'_, PyDict>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        self.validate_input(input_dict)?;
+        let initial = pydict_to_dynstate(input_dict)?;
+        let graph = Arc::clone(&self.inner);
+        let schema_fields = Arc::clone(&self.schema_fields);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let result = graph.invoke(initial).await.map_err(sg_err_to_py)?;
+            Python::with_gil(|py| {
+                let result_dict = PyDict::new_bound(py);
+                for field in schema_fields.iter() {
+                    let val = result.get(field).unwrap_or(serde_json::Value::Null);
+                    result_dict.set_item(field, crate::json_to_py(py, &val)?)?;
+                }
+                Ok(result_dict.unbind().into_any())
+            })
+        })
+    }
+
     /// Execute the graph with a thread ID for checkpointing.
     fn invoke_with_thread(
         &self,
