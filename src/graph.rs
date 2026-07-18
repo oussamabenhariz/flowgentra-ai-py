@@ -501,6 +501,7 @@ pub struct PyStateGraphBuilder {
     max_steps: usize,
     max_duration: Option<std::time::Duration>,
     max_tokens: Option<u64>,
+    max_cost: Option<f64>,
     interrupt_before: Vec<String>,
     interrupt_after: Vec<String>,
     subgraphs: Vec<(String, Arc<StateGraph<DynState>>)>,
@@ -546,6 +547,7 @@ impl PyStateGraphBuilder {
             max_steps: 1000,
             max_duration: None,
             max_tokens: None,
+            max_cost: None,
             interrupt_before: Vec::new(),
             interrupt_after: Vec::new(),
             subgraphs: Vec::new(),
@@ -648,6 +650,14 @@ impl PyStateGraphBuilder {
     /// nodes populate; breach raises WorkflowTimeoutError.
     fn set_max_tokens(&mut self, max_tokens: u64) {
         self.max_tokens = Some(max_tokens);
+    }
+
+    /// Set an estimated-cost budget in USD for a single invocation. Checked
+    /// between nodes against the cumulative `_cost_usd` state field that nodes
+    /// populate via `record_usage_with_cost`; breach raises WorkflowTimeoutError.
+    /// Cost sums per LLM call at that model's price (see `set_model_price`).
+    fn set_max_cost(&mut self, max_cost_usd: f64) {
+        self.max_cost = Some(max_cost_usd);
     }
 
     /// Set the entry point node (first node executed).
@@ -1013,6 +1023,9 @@ impl PyStateGraphBuilder {
         }
         if let Some(t) = self.max_tokens {
             builder = builder.set_max_tokens(t);
+        }
+        if let Some(c) = self.max_cost {
+            builder = builder.set_max_cost(c);
         }
 
         for name in &self.interrupt_before {

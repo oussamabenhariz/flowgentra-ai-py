@@ -321,6 +321,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     llm_module.add_function(wrap_pyfunction!(llm::py_create_llm, &llm_module)?)?;
     llm_module.add_function(wrap_pyfunction!(py_estimate_tokens, &llm_module)?)?;
     llm_module.add_function(wrap_pyfunction!(py_model_pricing, &llm_module)?)?;
+    llm_module.add_function(wrap_pyfunction!(llm::py_set_model_price, &llm_module)?)?;
     m.add_submodule(&llm_module)?;
 
     // ── Tools Submodule ────────────────────────────────────────────────────────

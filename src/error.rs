@@ -232,7 +232,8 @@ pub fn to_py_err_state_graph(e: StateGraphError) -> PyErr {
         | StateGraphError::InterruptedAtBreakpoint { .. }
         | StateGraphError::ResumeFailed(_) => AgentExecutionError::new_err(msg),
         StateGraphError::WallClockExceeded { .. }
-        | StateGraphError::TokenBudgetExceeded { .. } => WorkflowTimeoutError::new_err(msg),
+        | StateGraphError::TokenBudgetExceeded { .. }
+        | StateGraphError::CostBudgetExceeded { .. } => WorkflowTimeoutError::new_err(msg),
         StateGraphError::InterruptedByNode { payload, .. } => {
             // Attach the payload as the exception argument so Python can read
             // exc.args[0] as a dict.

@@ -128,6 +128,17 @@ class StateGraphBuilder:
     def set_max_duration(self, seconds: float) -> None:
         """Wall-clock budget for a single invocation; breach raises WorkflowTimeoutError."""
         ...
+    def set_max_tokens(self, max_tokens: int) -> None:
+        """Total-token budget for a single invocation, checked against the
+        cumulative ``_token_usage.total_tokens`` state field; breach raises
+        WorkflowTimeoutError."""
+        ...
+    def set_max_cost(self, max_cost_usd: float) -> None:
+        """Estimated-cost budget in USD for a single invocation, checked against
+        the cumulative ``_cost_usd`` state field that nodes populate via
+        ``record_usage_with_cost``; breach raises WorkflowTimeoutError. Cost sums
+        per LLM call at that model's price (see ``llm.set_model_price``)."""
+        ...
     def set_entry_point(self, name: str) -> None: ...
     def set_max_steps(self, max_steps: int) -> None:
         """Set the maximum number of execution iterations before the graph aborts.
@@ -1281,6 +1292,14 @@ def py_estimate_tokens(text: str) -> int:
 
 def py_model_pricing(model: str) -> Optional[Tuple[float, float]]:
     """Get model pricing (input_per_million, output_per_million) in USD."""
+    ...
+
+def py_set_model_price(
+    model: str, input_per_million: float, output_per_million: float
+) -> None:
+    """Override or add a model's price (USD per million tokens), taking
+    precedence over the built-in table. Lets cost budgets price custom or new
+    models without a release."""
     ...
 
 def py_from_config_path(path: str) -> Any:

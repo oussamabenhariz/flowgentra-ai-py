@@ -4,8 +4,8 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 
 use flowgentra_ai::core::llm::{
-    create_llm, model_pricing, CachedLLM, FallbackLLM, LLMConfig, LLMProvider, Message,
-    MessageRole, ResponseFormat, RetryLLM, TokenUsage, ToolCall, ToolDefinition, LLM,
+    create_llm, model_pricing, set_model_price, CachedLLM, FallbackLLM, LLMConfig, LLMProvider,
+    Message, MessageRole, ResponseFormat, RetryLLM, TokenUsage, ToolCall, ToolDefinition, LLM,
 };
 
 use crate::error::to_py_err;
@@ -329,6 +329,16 @@ impl PyLLMConfig {
 #[pyfunction]
 pub fn py_model_pricing(model: &str) -> Option<(f64, f64)> {
     model_pricing(model)
+}
+
+// ─── py_set_model_price ───────────────────────────────────────────────────────
+
+/// Override or add a model's price, in USD per million tokens. Takes precedence
+/// over the built-in pricing table, so cost budgets can price custom or new
+/// models without a release. Matched case-insensitively by model name.
+#[pyfunction]
+pub fn py_set_model_price(model: &str, input_per_million: f64, output_per_million: f64) {
+    set_model_price(model, input_per_million, output_per_million);
 }
 
 // ─── PyLLM ────────────────────────────────────────────────────────────────────
