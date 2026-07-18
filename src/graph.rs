@@ -1299,6 +1299,34 @@ impl PyCompiledGraph {
         })
     }
 
+    /// Async variant of stream(): a native async iterator of event dicts.
+    ///
+    /// `async for event in graph.astream({...})` drives the graph on the tokio
+    /// runtime; each step is awaited via the stable `future_into_py`, so there
+    /// is no per-event thread bounce or `block_on` (F-22). Returns an object
+    /// with `__aiter__`/`__anext__`, so it can be built outside a running loop.
+    fn astream(&self, input_dict: &Bound<'_, PyDict>) -> PyResult<PyAsyncGraphStream> {
+        self.validate_input(input_dict)?;
+        let initial = pydict_to_dynstate(input_dict)?;
+        let graph = Arc::clone(&self.inner);
+        let events = graph.subscribe();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.cancel_flag
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        crate::get_runtime().spawn(async move {
+            let _ = tx.send(graph.invoke(initial).await);
+        });
+        Ok(PyAsyncGraphStream {
+            inner: Arc::new(tokio::sync::Mutex::new(AsyncStreamInner {
+                events,
+                result_rx: Some(rx),
+                listening: true,
+                done: false,
+            })),
+            schema_fields: Arc::clone(&self.schema_fields),
+        })
+    }
+
     /// Resume a previously interrupted graph from its checkpoint.
     fn resume(&self, py: Python<'_>, thread_id: &str) -> PyResult<PyObject> {
         let graph = Arc::clone(&self.inner);
@@ -1667,6 +1695,106 @@ impl PyGraphStream {
                 }
             }
         }
+    }
+}
+
+// ─── AsyncGraphStream ──────────────────────────────────────────────────────
+
+/// Async iterator over live execution events, returned by `astream()`.
+///
+/// Each `__anext__` is a native awaitable (stable `future_into_py`) that awaits
+/// the next event on the tokio runtime — no per-event thread bounce and no
+/// `block_on`. Mirrors `GraphStream`: yields event dicts, then a final `values`
+/// event with the final state, raising the typed error on failure.
+///
+/// Cancellation follows asyncio semantics (cancel the `async for` task); the
+/// synchronous `stream()` remains the path that polls OS signals for Ctrl+C.
+#[pyclass(name = "AsyncGraphStream")]
+pub struct PyAsyncGraphStream {
+    inner: Arc<tokio::sync::Mutex<AsyncStreamInner>>,
+    schema_fields: Arc<Vec<String>>,
+}
+
+struct AsyncStreamInner {
+    events: tokio::sync::broadcast::Receiver<ExecutionEvent>,
+    result_rx: Option<tokio::sync::oneshot::Receiver<Result<DynState, StateGraphError>>>,
+    /// Still draining the event channel (vs. emitting the terminal `values`).
+    listening: bool,
+    done: bool,
+}
+
+#[pymethods]
+impl PyAsyncGraphStream {
+    fn __aiter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __anext__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        let schema_fields = Arc::clone(&self.schema_fields);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            use pyo3::exceptions::PyStopAsyncIteration;
+            use tokio::sync::broadcast::error::RecvError;
+
+            let mut g = inner.lock().await;
+            if g.done {
+                return Err(PyStopAsyncIteration::new_err(()));
+            }
+
+            // Phase 1: drain events. GraphCompleted yields its dict and flips to
+            // the finishing phase; GraphFailed / channel-close fall straight
+            // through so the error (or final state) surfaces next.
+            if g.listening {
+                loop {
+                    match g.events.recv().await {
+                        Ok(event) => match event {
+                            ExecutionEvent::GraphFailed { .. } => {
+                                g.listening = false;
+                                break;
+                            }
+                            ExecutionEvent::GraphCompleted { .. } => {
+                                g.listening = false;
+                                return Python::with_gil(|py| {
+                                    PyGraphStream::event_to_dict(py, &event)
+                                });
+                            }
+                            _ => {
+                                return Python::with_gil(|py| {
+                                    PyGraphStream::event_to_dict(py, &event)
+                                });
+                            }
+                        },
+                        Err(RecvError::Lagged(_)) => continue,
+                        Err(RecvError::Closed) => {
+                            g.listening = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Phase 2: emit the final `values` event (or raise the graph error).
+            let Some(rx) = g.result_rx.take() else {
+                g.done = true;
+                return Err(PyStopAsyncIteration::new_err(()));
+            };
+            let result = rx.await.map_err(|_| {
+                crate::error::InternalError::new_err("Graph execution task terminated unexpectedly")
+            })?;
+            g.done = true;
+            let state = result.map_err(sg_err_to_py)?;
+            Python::with_gil(|py| {
+                let d = PyDict::new_bound(py);
+                d.set_item("type", "values")?;
+                let state_dict = PyDict::new_bound(py);
+                for field in schema_fields.iter() {
+                    let val = state.get(field).unwrap_or(serde_json::Value::Null);
+                    state_dict.set_item(field, crate::json_to_py(py, &val)?)?;
+                }
+                d.set_item("state", state_dict)?;
+                Ok(d.unbind().into_any())
+            })
+        })
     }
 }
 

@@ -305,6 +305,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     graph_module.add_class::<PyStateGraphBuilder>()?;
     graph_module.add_class::<PyCompiledGraph>()?;
     graph_module.add_class::<graph::PyGraphStream>()?;
+    graph_module.add_class::<graph::PyAsyncGraphStream>()?;
     graph_module.add("END", graph::PY_END)?;
     m.add_submodule(&graph_module)?;
 

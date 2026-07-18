@@ -1,6 +1,6 @@
 """Type stubs for the native Rust extension module."""
 
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Awaitable, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 # ─── State ───────────────────────────────────────────────────────────────────
 
@@ -246,6 +246,17 @@ class GraphStream:
 
     def __iter__(self) -> "GraphStream": ...
     def __next__(self) -> Dict[str, Any]: ...
+
+class AsyncGraphStream:
+    """Async iterator over live execution events (CompiledGraph.astream()).
+
+    Each __anext__ is a native awaitable driven by the tokio runtime — no
+    per-event thread bounce. Yields event dicts, ending with a `values` event
+    carrying the final state; raises the graph's typed error on failure.
+    """
+
+    def __aiter__(self) -> "AsyncGraphStream": ...
+    def __anext__(self) -> Awaitable[Dict[str, Any]]: ...
 
 def graph_end() -> str:
     """Return the END constant string."""

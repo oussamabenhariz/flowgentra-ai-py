@@ -23,8 +23,6 @@ Examples:
 
 from __future__ import annotations
 
-import asyncio
-
 from flowgentra_ai._native import graph as _g, nodes as _n
 from flowgentra_ai._native import NodeInterrupt
 
@@ -51,28 +49,12 @@ async def _ainvoke(self, input_dict: dict) -> dict:
     return await self._ainvoke_native(input_dict)
 
 
-async def _astream(self, input_dict: dict):
-    """Async variant of stream(): an async iterator of event dicts.
-
-    Example:
-        async for event in graph.astream({"messages": []}):
-            print(event["type"])
-    """
-    stream = self.stream(input_dict)
-    sentinel = object()
-    while True:
-        event = await asyncio.to_thread(next, stream, sentinel)
-        if event is sentinel:
-            return
-        yield event
-
-
 # `ainvoke` wraps the native `_ainvoke_native` awaitable in an `async def` so
-# the native future is created inside the running loop (see _ainvoke). `astream`
-# stays a thin async generator over the GIL-releasing sync stream (pull-based; a
-# native async generator would need pyo3-async-runtimes' unstable-streams).
+# the native future is created inside the running loop (see _ainvoke).
+# `astream` is fully native: it returns an AsyncGraphStream whose __anext__ is
+# a native awaitable — no per-event thread bounce (F-22). Both use only the
+# stable future_into_py API (unstable-streams deliberately not enabled).
 CompiledGraph.ainvoke = _ainvoke
-CompiledGraph.astream = _astream
 
 # Default matches the Rust runtime default (config/mod.rs `default_recursion_limit`).
 _DEFAULT_MAX_STEPS: int = 25

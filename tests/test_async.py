@@ -45,6 +45,32 @@ def test_astream_yields_events():
     assert types[-1] == "values"
 
 
+def test_astream_early_break_does_not_hang():
+    """Breaking out of `async for` mid-stream must not deadlock or leak the
+    native stream (the classic hazard of bridged async iterators)."""
+    g = build()
+
+    async def first_only():
+        agen = g.astream({"x": 1, "log": []})
+        async for event in agen:
+            return event["type"]
+
+    assert asyncio.run(first_only()) == "graph_started"
+
+
+def test_astream_exhausted_raises_stop_async_iteration():
+    g = build()
+
+    async def drain_then_next():
+        agen = g.astream({"x": 1, "log": []})
+        async for _ in agen:
+            pass
+        with pytest.raises(StopAsyncIteration):
+            await agen.__anext__()
+
+    asyncio.run(drain_then_next())
+
+
 def test_concurrent_ainvoke_actually_parallelizes():
     """Two 100ms graphs concurrently should take well under 200ms
     (nodes release the GIL only around Rust work, but asyncio.to_thread
