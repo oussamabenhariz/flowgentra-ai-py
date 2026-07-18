@@ -16,6 +16,13 @@ Tracks `flowgentra-ai` 0.3.1. No Python API changes.
   than by legacy BFS-wave last-write-wins, so a config that (accidentally)
   depended on wave ordering can produce different output.
 
+### Changed
+- `CompiledGraph.ainvoke` is now a native awaitable (pyo3-async-runtimes): the
+  graph runs on the tokio runtime bridged to the asyncio loop, replacing the
+  `asyncio.to_thread(invoke)` wrapper — no worker-thread bounce, no per-call
+  `block_on` (F-22). Behavior is unchanged for `await g.ainvoke(x)` and
+  `asyncio.run(g.ainvoke(x))`. `astream` still uses `to_thread`.
+
 ### Added
 - End-to-end test running a config-driven agent through the bridge from Python.
 - `Graph.set_max_cost(usd)` — USD cost budget, mirroring `set_max_tokens`;
