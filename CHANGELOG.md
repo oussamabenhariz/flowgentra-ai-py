@@ -18,6 +18,10 @@ Tracks `flowgentra-ai` 0.3.1. No Python API changes.
 
 ### Added
 - End-to-end test running a config-driven agent through the bridge from Python.
+- `Graph.set_max_cost(usd)` — USD cost budget, mirroring `set_max_tokens`;
+  breach raises `WorkflowTimeoutError`. `llm.set_model_price(model, input, output)`
+  registers a price override. Stubs added (including the previously missing
+  `set_max_tokens`). Requires a wheel rebuild to be importable.
 
 ## [0.3.0] - 2026-07-16
 
