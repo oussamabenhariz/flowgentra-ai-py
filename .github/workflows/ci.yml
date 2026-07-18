@@ -9,6 +9,31 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: flowgentra-ai-py
+      # The bindings use a path dependency on the core repo.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/flowgentra-ai-rs
+          path: flowgentra-ai-rs
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: flowgentra-ai-py
+      - name: cargo fmt
+        working-directory: flowgentra-ai-py
+        run: cargo fmt --all --check
+      - name: cargo clippy
+        working-directory: flowgentra-ai-py
+        run: cargo clippy -p flowgentra-ai-py --all-targets -- -D warnings
+
   test:
     name: build + pytest (${{ matrix.os }}, py${{ matrix.python }})
     strategy:
