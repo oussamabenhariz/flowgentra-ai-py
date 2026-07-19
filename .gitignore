@@ -10,6 +10,8 @@ __pycache__/
 *.pyo
 *.egg-info/
 dist/
+dist-ci/
+dist-release/
 .venv/
 
 # IDE
