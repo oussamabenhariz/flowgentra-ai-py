@@ -4,6 +4,22 @@ All notable changes to the `flowgentra-ai` Python package. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning follows SemVer
 (0.x: minor bumps may break).
 
+## [0.3.2] - 2026-07-19
+
+### Fixed
+- `Conversational` (the skills-aware wrapper) was missing the canonical
+  `run()` method introduced in 0.3.0 — it only exposed the deprecated
+  `execute_input()`. All seven agent types now share the `run()` vocabulary.
+- `flowgentra_ai.document_loaders` was unimportable: the wrapper read the
+  loader classes from `_native.rag` after they moved to `_native.loaders`,
+  so importing the subpackage raised `AttributeError`. The never-exposed
+  `*Config` placeholder names now degrade to `None` instead of crashing the
+  import.
+
+### Added
+- Regression test suite that imports every public wrapper module and asserts
+  the unified `run()` vocabulary across all agent types.
+
 ## [0.3.1] - 2026-07-17
 
 Tracks `flowgentra-ai` 0.3.1. No Python API changes.

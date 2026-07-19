@@ -1,6 +1,6 @@
 [package]
 name = "flowgentra-ai-py"
-version = "0.3.1"
+version = "0.3.2"
 
 edition = "2021"
 authors = ["Oussama Ben Hariz"]
@@ -22,7 +22,7 @@ redis-store = []
 neo4j-store = []
 
 [dependencies]
-flowgentra-ai = { version = "0.3.1", path = "../flowgentra-ai-rs/flowgentra-ai", features = [
+flowgentra-ai = { version = "0.3.2", features = [
     "sqlite", "postgres", "mysql", "mssql",
     "mongodb-store", "redis-store", "neo4j-store", "cassandra-store", "elasticsearch-store",
     "pgvector-store", "redis-vector", "elasticsearch-vector",
