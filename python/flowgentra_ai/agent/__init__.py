@@ -147,9 +147,13 @@ class Conversational:
             )
             self._skill_mode = False
 
-    def execute_input(self, user_input: str) -> str:
+    def run(self, user_input: str) -> str:
         """Run the agent with a string input and return the response."""
         return self._inner.execute_input(user_input)
+
+    def execute_input(self, user_input: str) -> str:
+        """Deprecated alias for :meth:`run`."""
+        return self.run(user_input)
 
     @property
     def name(self) -> str:
