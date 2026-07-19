@@ -63,10 +63,11 @@ Examples:
         docs = GitLoader("./my_repo").with_extensions(["rs", "py"]).load()
 """
 
-from flowgentra_ai._native import data as _d, rag as _r
+from flowgentra_ai._native import data as _d, loaders as _l, rag as _r
 
 def _try(attr, default=None):
-    return getattr(_r, attr, default)
+    """Loaders live in _native.loaders; PDF helpers in _native.rag."""
+    return getattr(_l, attr, getattr(_r, attr, default))
 
 # ── Basic file loaders ────────────────────────────────────────────────────────
 FileType = _d.FileType
@@ -83,20 +84,20 @@ IngestionPipeline = _d.IngestionPipeline
 IngestionStats = _d.IngestionStats
 
 # ── Web loader ────────────────────────────────────────────────────────────────
-WebLoader = _r.WebLoader
-WebLoaderConfig = _r.WebLoaderConfig
+WebLoader = _l.WebLoader
+WebLoaderConfig = _try("WebLoaderConfig")
 
 # ── CSV / JSON / JSONL loaders ────────────────────────────────────────────────
-CsvLoader = _r.CsvLoader
-JsonLoader = _r.JsonLoader
-JsonlLoader = _r.JsonlLoader
+CsvLoader = _l.CsvLoader
+JsonLoader = _l.JsonLoader
+JsonlLoader = _l.JsonlLoader
 
 # ── DOCX loader ───────────────────────────────────────────────────────────────
-DocxLoader = _r.DocxLoader
+DocxLoader = _l.DocxLoader
 
 # ── Recursive directory loader ────────────────────────────────────────────────
-DirectoryLoader = _r.DirectoryLoader
-DirectoryLoaderConfig = _r.DirectoryLoaderConfig
+DirectoryLoader = _l.DirectoryLoader
+DirectoryLoaderConfig = _try("DirectoryLoaderConfig")
 
 # ── Excel (XLSX) loader ───────────────────────────────────────────────────────
 ExcelLoader = _try("ExcelLoader")
