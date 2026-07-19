@@ -12,12 +12,21 @@ env:
   OPENSSL_STATIC: "1"
   PYTHON_VERSIONS: "3.9 3.10 3.11 3.12 3.13"
 
+# The bindings use a path dependency on the core repo
+# (../flowgentra-ai-rs/flowgentra-ai), so every build job checks out both
+# repos side by side — same layout as ci.yml.
 jobs:
   build-linux-x86:
     name: Build wheels (Linux x86_64)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: flowgentra-ai-py
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/flowgentra-ai-rs
+          path: flowgentra-ai-rs
 
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
@@ -37,18 +46,25 @@ jobs:
         run: pip install maturin
 
       - name: Build wheels
+        working-directory: flowgentra-ai-py
         run: maturin build --release --out dist -i python3.9 -i python3.10 -i python3.11 -i python3.12 -i python3.13
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-linux-x86_64
-          path: dist/*.whl
+          path: flowgentra-ai-py/dist/*.whl
 
   build-linux-aarch64:
     name: Build wheels (Linux aarch64)
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: flowgentra-ai-py
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/flowgentra-ai-rs
+          path: flowgentra-ai-rs
 
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
@@ -68,12 +84,13 @@ jobs:
         run: pip install maturin
 
       - name: Build wheels
+        working-directory: flowgentra-ai-py
         run: maturin build --release --out dist -i python3.9 -i python3.10 -i python3.11 -i python3.12 -i python3.13
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-linux-aarch64
-          path: dist/*.whl
+          path: flowgentra-ai-py/dist/*.whl
 
   build-macos:
     name: Build wheels (macOS - ${{ matrix.target }})
@@ -84,6 +101,12 @@ jobs:
         target: [x86_64-apple-darwin, aarch64-apple-darwin]
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: flowgentra-ai-py
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/flowgentra-ai-rs
+          path: flowgentra-ai-rs
 
       - uses: actions/setup-python@v5
         with:
@@ -101,19 +124,26 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: flowgentra-ai-py
           target: ${{ matrix.target }}
           args: --release --out dist -i python3.9 -i python3.10 -i python3.11 -i python3.12 -i python3.13
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-macos-${{ matrix.target }}
-          path: dist/*.whl
+          path: flowgentra-ai-py/dist/*.whl
 
   build-windows:
     name: Build wheels (Windows)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: flowgentra-ai-py
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/flowgentra-ai-rs
+          path: flowgentra-ai-rs
 
       - uses: actions/setup-python@v5
         with:
@@ -129,29 +159,37 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
+          working-directory: flowgentra-ai-py
           target: x64
           args: --release --out dist -i python3.9 -i python3.10 -i python3.11 -i python3.12 -i python3.13
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-windows
-          path: dist/*.whl
+          path: flowgentra-ai-py/dist/*.whl
 
   build-sdist:
     name: Build source distribution
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: flowgentra-ai-py
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/flowgentra-ai-rs
+          path: flowgentra-ai-rs
 
       - uses: PyO3/maturin-action@v1
         with:
+          working-directory: flowgentra-ai-py
           command: sdist
           args: --out dist
 
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
-          path: dist/*.tar.gz
+          path: flowgentra-ai-py/dist/*.tar.gz
 
   publish:
     name: Publish to PyPI
