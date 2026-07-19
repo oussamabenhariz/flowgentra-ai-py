@@ -410,7 +410,7 @@ cost = usage.estimated_cost("gpt-4")
 
 ## Full Documentation
 
-For complete API reference and guides, visit the [documentation](https://oussamabenhariz.github.io/flowgentra-ai/).
+For complete API reference and guides, visit the [documentation site](https://oussamabenhariz.github.io/flowgentra-ai-docs/).
 
 ## License
 
