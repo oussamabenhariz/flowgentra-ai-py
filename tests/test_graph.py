@@ -172,3 +172,37 @@ def test_reentrant_node_invoking_subgraph(chain_graph):
     result = g.invoke({"x": 1, "log": []})
     assert result["x"] == 4
     assert result["log"] == ["outer"]
+
+
+class MsgState(TypedDict):
+    messages: List[str]
+
+
+def test_add_subgraph_merges_result_into_parent():
+    """builder.add_subgraph() wires a compiled graph in as a single node —
+    its final state must merge into the parent, not get discarded."""
+
+    def inner_echo(s):
+        return {"messages": s["messages"] + ["from_subgraph"]}
+
+    inner_builder = StateGraph(MsgState)
+    inner_builder.add_node("inner_echo", inner_echo)
+    inner_builder.set_entry_point("inner_echo")
+    inner_builder.add_edge("inner_echo", END)
+    subgraph = inner_builder.compile()
+
+    def outer_start(s):
+        return {"messages": s["messages"] + ["outer"]}
+
+    outer_builder = StateGraph(MsgState)
+    outer_builder.add_node("outer_start", outer_start)
+    outer_builder.add_subgraph("sub", subgraph)
+    outer_builder.set_entry_point("outer_start")
+    outer_builder.add_edge("outer_start", "sub")
+    outer_builder.add_edge("sub", END)
+    graph = outer_builder.compile()
+
+    result = graph.invoke({"messages": []})
+    # Both the outer node's message and the subgraph's message, exactly once —
+    # no drop and no double-count of the Append-reduced "messages" field.
+    assert result["messages"] == ["outer", "from_subgraph"]

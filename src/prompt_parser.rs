@@ -20,8 +20,9 @@ use crate::json_to_py;
 ///     result = tmpl.format({"name": "Alice", "role": "developer"})
 ///     print(result)  # "Hello Alice, you are a developer"
 #[pyclass(name = "PromptTemplate")]
+#[derive(Clone)]
 pub struct PyPromptTemplate {
-    inner: PromptTemplate,
+    pub(crate) inner: PromptTemplate,
 }
 
 #[pymethods]

@@ -57,6 +57,44 @@ StateField = _a.StateField
 MemoryAwareAgent = _adv.MemoryAwareAgent
 MemoryStats = _adv.MemoryStats
 
+
+async def _arun(self) -> dict:
+    """Async variant of run(). Drives the graph on the tokio runtime via a
+    native awaitable (pyo3-async-runtimes) — no worker-thread bounce and no
+    per-call block_on. Config-based agents only (``Agent.from_config_path()``).
+
+    Example:
+        result = await agent.arun()
+    """
+    return await self._arun_native()
+
+
+async def _arun_with_input(self, input: str) -> dict:
+    """Async variant of run_with_input(). Agents created via ``Agent.create()`` only.
+
+    Example:
+        result = await agent.arun_with_input("Hello!")
+    """
+    return await self._arun_with_input_native(input)
+
+
+async def _arun_with_thread(self, thread_id: str) -> dict:
+    """Async variant of run_with_thread(). Config-based agents only.
+
+    Example:
+        result = await agent.arun_with_thread("session-1")
+    """
+    return await self._arun_with_thread_native(thread_id)
+
+
+# `async def` wrappers so the native future is created inside the running
+# loop (same reason as `CompiledGraph.ainvoke` in `flowgentra_ai.graph`) —
+# `await agent.arun()` and `asyncio.run(agent.arun())` both work; calling the
+# `_native` method directly requires an already-running loop.
+Agent.arun = _arun
+Agent.arun_with_input = _arun_with_input
+Agent.arun_with_thread = _arun_with_thread
+
 # Typed agent constructors (no skills support — use Conversational for that)
 ZeroShotReAct = _a.ZeroShotReAct
 FewShotReAct = _a.FewShotReAct

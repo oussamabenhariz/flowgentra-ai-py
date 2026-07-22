@@ -8,6 +8,7 @@ use flowgentra_ai::core::tools::{JsonSchema, Tool, ToolRegistry};
 
 use crate::builtin_tools::{PyCalculatorTool, PyFilesTool, PyWebRequestTool};
 use crate::error::to_py_err;
+use crate::llm::PyToolDefinition;
 use crate::py_code_exec::{PyNodeJsReplTool, PyPythonReplTool, PyShellTool};
 use crate::py_communication::{PyGmailTool, PySlackTool};
 use crate::py_data::{PyCsvQueryTool, PyJsonGetValueTool, PyJsonListKeysTool};
@@ -240,13 +241,42 @@ impl PyToolRegistry {
         self.inner.has(name)
     }
 
-    /// Get tool definition as a dict.
+    /// Get tool definition as a dict — `{"name", "description", "parameters"}`,
+    /// `parameters` being the tool's JSON input schema.
     fn get(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyDict>> {
         let definition = self.inner.get_definition(name).map_err(to_py_err)?;
         let dict = PyDict::new_bound(py);
         dict.set_item("name", &definition.name)?;
         dict.set_item("description", &definition.description)?;
+        let schema_json = serde_json::to_value(&definition.input_schema)
+            .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
+        dict.set_item("parameters", json_to_py(py, &schema_json)?)?;
         Ok(dict.into())
+    }
+
+    /// Every built-in tool's definition as a `ToolDefinition` (name,
+    /// description, parameters) — ready to pass straight to
+    /// `LLM.chat_with_tools(messages, tool_defs)`.
+    ///
+    /// Custom Python tools registered via `flowgentra_ai.tools.ToolRegistry`
+    /// (the Python-side wrapper) aren't visible here — see that class's
+    /// `to_tool_definitions()` for the merged built-in + custom view.
+    fn list_definitions(&self) -> PyResult<Vec<PyToolDefinition>> {
+        self.inner
+            .list_definitions()
+            .into_iter()
+            .map(|d| {
+                let params = serde_json::to_value(&d.input_schema)
+                    .map_err(|e| crate::error::InternalError::new_err(e.to_string()))?;
+                Ok(PyToolDefinition {
+                    inner: flowgentra_ai::core::llm::ToolDefinition::new(
+                        d.name,
+                        d.description,
+                        params,
+                    ),
+                })
+            })
+            .collect()
     }
 
     fn __len__(&self) -> usize {

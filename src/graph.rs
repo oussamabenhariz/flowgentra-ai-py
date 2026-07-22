@@ -16,7 +16,8 @@ use flowgentra_ai::core::middleware::Middleware;
 use flowgentra_ai::core::observability::events::{EventBroadcaster, ExecutionEvent};
 use flowgentra_ai::core::state::{Context, DynState, DynStateUpdate};
 use flowgentra_ai::core::state_graph::{
-    edge::END, node::Node, FileCheckpointer, StateGraph, StateGraphBuilder, StateGraphError,
+    edge::END, node::Node, Command, FileCheckpointer, StateGraph, StateGraphBuilder,
+    StateGraphError,
 };
 
 use flowgentra_ai::core::observability::visualization::ExecutionTracer;
@@ -509,6 +510,7 @@ pub struct PyStateGraphBuilder {
     subgraphs: Vec<(String, Arc<StateGraph<DynState>>)>,
     checkpointer_path: Option<String>,
     checkpointer_sqlite_url: Option<String>,
+    checkpointer_postgres_url: Option<String>,
     middleware: Vec<Arc<dyn Middleware<DynState>>>,
     broadcaster: Option<Arc<EventBroadcaster>>,
 }
@@ -555,6 +557,7 @@ impl PyStateGraphBuilder {
             subgraphs: Vec::new(),
             checkpointer_path: None,
             checkpointer_sqlite_url: None,
+            checkpointer_postgres_url: None,
             middleware: Vec::new(),
             broadcaster: None,
         })
@@ -888,6 +891,22 @@ impl PyStateGraphBuilder {
         Ok(())
     }
 
+    /// Persist checkpoints in a Postgres database — the pick for a
+    /// horizontally-scaled service where multiple processes/replicas may
+    /// resume the same thread (SQLite and the in-memory default are both
+    /// single-process).
+    ///
+    /// Accepts a Postgres URL, e.g. "postgres://user:pass@localhost/mydb".
+    /// The checkpoint table is created if missing. Overrides
+    /// set_checkpointer/set_sqlite_checkpointer if more than one is called.
+    ///
+    /// Example:
+    ///     builder.set_postgres_checkpointer("postgres://user:pass@localhost/mydb")
+    fn set_postgres_checkpointer(&mut self, url: &str) -> PyResult<()> {
+        self.checkpointer_postgres_url = Some(url.to_string());
+        Ok(())
+    }
+
     /// Attach an EventBroadcaster so the compiled graph emits execution events.
     ///
     /// Subscribe from the broadcaster before invoking the graph to receive
@@ -1045,7 +1064,18 @@ impl PyStateGraphBuilder {
             builder = builder.add_node(name.clone(), node);
         }
 
-        if let Some(ref url) = self.checkpointer_sqlite_url {
+        if let Some(ref url) = self.checkpointer_postgres_url {
+            let cp = crate::run_async(
+                flowgentra_ai::core::state_graph::PostgresCheckpointer::connect(url),
+            )
+            .map_err(|e| {
+                crate::error::CheckpointError::new_err(format!(
+                    "Failed to open Postgres checkpointer at '{}': {}",
+                    url, e
+                ))
+            })?;
+            builder = builder.set_checkpointer(Arc::new(cp));
+        } else if let Some(ref url) = self.checkpointer_sqlite_url {
             let cp = crate::run_async(
                 flowgentra_ai::core::state_graph::SqliteCheckpointer::connect(url),
             )
@@ -1156,6 +1186,120 @@ pub(crate) fn run_graph_with_signals<T: Send + 'static>(
                     "Graph execution task terminated unexpectedly",
                 ));
             }
+        }
+    }
+}
+
+/// Resume instructions for `CompiledGraph.resume_command()`.
+///
+/// Unifies the things you may want to do when resuming a graph paused by
+/// `NodeInterrupt` or an `interrupt_before`/`interrupt_after` breakpoint:
+///
+/// - `update={...}` — merge a partial state update before resuming (same as
+///   `resume_with_state`), validated against the state schema. **This is the
+///   way to hand a human's answer to a Python node function** — Python nodes
+///   receive only `state: dict` (no context object), so they read the answer
+///   back from state, not from `resume`.
+/// - `goto="node_name"` — resume at an arbitrary node instead of the
+///   checkpoint's natural successor.
+/// - `resume=value` — hand a value to the paused node via the node
+///   *context's* resume slot. Only reachable from Rust-authored nodes
+///   (`ctx.resume_value()`); Python node functions cannot see it today. Kept
+///   for parity with Rust `Command::resume` and for graphs that mix Python
+///   and Rust nodes.
+///
+/// All three are optional and composable. Mirrors LangGraph's
+/// `Command(resume=, update=, goto=)`.
+///
+/// ```python
+/// from flowgentra_ai.graph import Command
+///
+/// # Hand the human's answer to a Python node — it reads state["answer"].
+/// result = graph.resume_command("t1", Command(update={"answer": "yes"}))
+///
+/// # Jump straight to a different node on resume.
+/// result = graph.resume_command("t1", Command(goto="cleanup"))
+/// ```
+#[pyclass(name = "Command")]
+#[derive(Clone)]
+pub struct PyCommand {
+    resume: Option<serde_json::Value>,
+    update: Option<HashMap<String, serde_json::Value>>,
+    goto: Option<String>,
+}
+
+#[pymethods]
+impl PyCommand {
+    #[new]
+    #[pyo3(signature = (resume=None, update=None, goto=None))]
+    fn new(
+        resume: Option<&Bound<'_, PyAny>>,
+        update: Option<&Bound<'_, PyDict>>,
+        goto: Option<String>,
+    ) -> PyResult<Self> {
+        let resume = resume.map(crate::py_to_json).transpose()?;
+        let update = match update {
+            Some(d) => {
+                let mut m = HashMap::new();
+                for (k, v) in d.iter() {
+                    let key: String = k.extract()?;
+                    m.insert(key, crate::py_to_json(&v)?);
+                }
+                Some(m)
+            }
+            None => None,
+        };
+        Ok(Self {
+            resume,
+            update,
+            goto,
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "Command(resume={}, update={}, goto={})",
+            self.resume
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "None".to_string()),
+            self.update.is_some(),
+            self.goto
+                .as_deref()
+                .map(|g| format!("'{g}'"))
+                .unwrap_or_else(|| "None".to_string()),
+        )
+    }
+}
+
+/// Handle to a running `CompiledGraph.serve_dev()` server.
+#[pyclass(name = "DevServerHandle")]
+pub struct PyDevServerHandle {
+    inner: Option<flowgentra_ai::core::observability::DevServerHandle>,
+}
+
+#[pymethods]
+impl PyDevServerHandle {
+    /// The URL to open in a browser.
+    #[getter]
+    fn url(&self) -> PyResult<String> {
+        self.inner
+            .as_ref()
+            .map(|h| h.url())
+            .ok_or_else(|| crate::error::InternalError::new_err("dev server already shut down"))
+    }
+
+    /// Stop the server.
+    fn shutdown(&mut self) {
+        if let Some(h) = self.inner.take() {
+            h.shutdown();
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        match &self.inner {
+            Some(h) => format!("DevServerHandle(url='{}')", h.url()),
+            None => "DevServerHandle(shut down)".to_string(),
         }
     }
 }
@@ -1374,6 +1518,42 @@ impl PyCompiledGraph {
         self.state_to_output_dict(py, &result)
     }
 
+    /// Resume using a `Command` — unifies a resume value, a state update, and
+    /// a `goto` override in one call. See `Command` for details.
+    fn resume_command(
+        &self,
+        py: Python<'_>,
+        thread_id: &str,
+        command: &PyCommand,
+    ) -> PyResult<PyObject> {
+        let mut cmd = Command::<DynState>::new();
+        cmd.resume = command.resume.clone();
+        cmd.goto = command.goto.clone();
+
+        if let Some(update) = &command.update {
+            for key in update.keys() {
+                if !self.schema_set.contains(key) {
+                    return Err(PyKeyError::new_err(format!(
+                        "resume_command: key '{}' is not declared in the state schema. \
+                         Valid keys: {:?}",
+                        key, *self.schema_fields
+                    )));
+                }
+            }
+            let mut state_update = DynStateUpdate::new();
+            for (key, val) in update {
+                state_update.insert(key.clone(), val.clone());
+            }
+            cmd.update = Some(state_update);
+        }
+
+        let fut = self.inner.resume_with_command(thread_id, cmd);
+        let result = py
+            .allow_threads(|| crate::run_async(fut))
+            .map_err(sg_err_to_py)?;
+        self.state_to_output_dict(py, &result)
+    }
+
     /// Subscribe to execution events emitted during graph.invoke().
     ///
     /// Returns an EventReceiver whose drain() / try_recv() can be polled
@@ -1411,6 +1591,30 @@ impl PyCompiledGraph {
     fn to_json(&self, py: Python<'_>) -> PyResult<PyObject> {
         let val = self.inner.to_json();
         crate::json_to_py(py, &val)
+    }
+
+    /// Start a local dev server showing this graph's nodes and a live feed of
+    /// execution events. Not a hosted product (no state editing, no
+    /// time-travel) — the smallest thing that's actually useful for watching
+    /// `invoke()` calls happen in real time from a browser.
+    ///
+    /// Non-blocking — starts the server in the background and returns
+    /// immediately, so you can start it and then call `invoke()` normally.
+    ///
+    /// Example:
+    ///     handle = graph.serve_dev(7878)
+    ///     print(f"dev viewer: {handle.url}")
+    ///     graph.invoke({...})  # watch it happen live in the browser
+    ///     handle.shutdown()
+    fn serve_dev(&self, port: u16) -> PyDevServerHandle {
+        // `serve_dev` calls `tokio::spawn` internally, which needs an
+        // ambient runtime context — enter the shared runtime for the
+        // duration of this synchronous call (the spawned tasks then keep
+        // running on it in the background after we return).
+        let _guard = crate::get_runtime().enter();
+        PyDevServerHandle {
+            inner: Some(self.inner.serve_dev(port)),
+        }
     }
 
     /// Return a list of state snapshots from execution history (requires checkpointer).

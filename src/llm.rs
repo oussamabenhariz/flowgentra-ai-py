@@ -1,12 +1,16 @@
 //! Python bindings for LLM — create_llm(), chat(), chat_with_tools()
 
 use pyo3::prelude::*;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use flowgentra_ai::core::llm::{
-    create_llm, model_pricing, set_model_price, CachedLLM, FallbackLLM, LLMConfig, LLMProvider,
-    Message, MessageRole, ResponseFormat, RetryLLM, TokenUsage, ToolCall, ToolDefinition, LLM,
+    create_llm, model_pricing, set_model_price, CachedLLM, Chain, FallbackLLM, LLMConfig,
+    LLMProvider, Message, MessageRole, MockLLM, ResponseFormat, RetryLLM, TokenUsage, ToolCall,
+    ToolDefinition, LLM,
 };
+
+use crate::prompt_parser::PyPromptTemplate;
 
 use crate::error::to_py_err;
 use crate::{json_to_py, py_to_json};
@@ -350,6 +354,157 @@ pub fn py_set_model_price(model: &str, input_per_million: f64, output_per_millio
 ///     client = LLM.from_config(config)
 ///     response = client.chat([Message.user("Hello!")])
 ///     print(response.content)
+// ─── PyMockLLM ──────────────────────────────────────────────────────────────
+
+/// Scripted, offline `LLM` for tests — no network, no credentials, deterministic.
+///
+/// Mirrors the Rust `MockLLM` builder. `when()`'s arbitrary-predicate form
+/// isn't exposed here (a Rust closure can't cross the FFI boundary); use
+/// `when_contains` or `sequence` from Python, or build a `MockLLM` in Rust
+/// and pass it through `Agent`/`StateGraph` construction if you need it.
+///
+/// Example:
+///     from flowgentra_ai.llm import MockLLM
+///
+///     mock = MockLLM()
+///     mock.when_contains("weather", "It is sunny")
+///     mock.otherwise("I don't know")
+///     llm = mock.as_llm()  # -> LLM, usable anywhere a real LLM is
+///     llm.chat([Message.user("what's the weather?")])  # -> "It is sunny"
+///
+///     # Fixed reply to everything:
+///     llm = MockLLM.always("hello").as_llm()
+///
+///     # Scripted sequence (repeats the last reply once exhausted):
+///     llm = MockLLM.sequence(["step 1 done", "step 2 done"]).as_llm()
+#[pyclass(name = "MockLLM")]
+#[derive(Clone, Default)]
+pub struct PyMockLLM {
+    inner: MockLLM,
+}
+
+#[pymethods]
+impl PyMockLLM {
+    /// An empty mock; falls back to `""` until `otherwise`/`when_contains` are set.
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: MockLLM::new(),
+        }
+    }
+
+    /// Always return the same reply, regardless of input.
+    #[staticmethod]
+    fn always(reply: String) -> Self {
+        Self {
+            inner: MockLLM::always(reply),
+        }
+    }
+
+    /// Return `replies` in order, one per call (repeats the last once exhausted).
+    #[staticmethod]
+    fn sequence(replies: Vec<String>) -> Self {
+        Self {
+            inner: MockLLM::sequence(replies),
+        }
+    }
+
+    /// Reply with `reply` when the latest user message contains `needle`.
+    fn when_contains(&mut self, needle: String, reply: String) {
+        self.inner = std::mem::take(&mut self.inner).when_contains(needle, reply);
+    }
+
+    /// Fallback reply when no matcher fires.
+    fn otherwise(&mut self, reply: String) {
+        self.inner = std::mem::take(&mut self.inner).otherwise(reply);
+    }
+
+    /// Report token usage from `chat_with_usage` (rough word-count estimate).
+    fn with_usage(&mut self) {
+        self.inner = std::mem::take(&mut self.inner).with_usage();
+    }
+
+    /// Number of times `chat*` has been invoked.
+    fn call_count(&self) -> usize {
+        self.inner.call_count()
+    }
+
+    /// Wrap as an `LLM` — usable anywhere a real LLM is expected (agents,
+    /// `chat_with_tools`, `StateGraph` context, ...).
+    fn as_llm(&self) -> PyLLM {
+        PyLLM {
+            inner: Arc::new(self.inner.clone()),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("MockLLM(calls={})", self.inner.call_count())
+    }
+}
+
+// ─── PyChain ────────────────────────────────────────────────────────────────
+
+/// A `PromptTemplate` piped into an `LLM` — sugar for the common "fill in a
+/// prompt, call the LLM" pipeline so it doesn't need a whole graph.
+///
+/// Prefer `StateGraph` for anything with branching, loops, retries, or
+/// persistence; `Chain` is only for a single linear prompt → LLM step.
+///
+/// Building one directly (`Chain(prompt, llm)`) is equivalent to composing
+/// with `|` (`prompt | llm`, from `flowgentra_ai.chain`) — the pipe operator
+/// is more general (it also accepts output parsers and plain functions as
+/// extra stages); construct `Chain` directly when you only need these two.
+///
+/// Example:
+///     from flowgentra_ai.llm import Chain, LLM, PromptTemplate
+///
+///     prompt = PromptTemplate("Translate '{text}' to French.")
+///     llm = LLM(provider="anthropic", model="claude-opus-4-6")
+///     chain = Chain(prompt, llm)
+///     reply = chain.invoke({"text": "Hello"})
+#[pyclass(name = "Chain")]
+pub struct PyChain {
+    inner: Chain,
+}
+
+#[pymethods]
+impl PyChain {
+    #[new]
+    fn new(prompt: PyPromptTemplate, llm: PyRef<'_, PyLLM>) -> Self {
+        Self {
+            inner: Chain::new(prompt.inner, Arc::clone(&llm.inner)),
+        }
+    }
+
+    /// Format the prompt with `variables`, send it to the LLM, return the reply Message.
+    fn invoke(&self, variables: HashMap<String, String>) -> PyResult<PyMessage> {
+        let pairs: Vec<(&str, &str)> = variables
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let result = crate::run_async(self.inner.invoke(&pairs)).map_err(to_py_err)?;
+        Ok(PyMessage { inner: result })
+    }
+
+    /// Like `invoke`, but parses the reply as JSON.
+    fn invoke_structured(
+        &self,
+        py: Python<'_>,
+        variables: HashMap<String, String>,
+    ) -> PyResult<PyObject> {
+        let pairs: Vec<(&str, &str)> = variables
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let result = crate::run_async(self.inner.invoke_structured(&pairs)).map_err(to_py_err)?;
+        json_to_py(py, &result)
+    }
+
+    fn __repr__(&self) -> String {
+        "Chain(prompt, llm)".to_string()
+    }
+}
+
 #[pyclass(name = "LLM")]
 pub struct PyLLM {
     pub(crate) inner: Arc<dyn LLM>,

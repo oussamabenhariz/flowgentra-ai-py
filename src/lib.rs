@@ -306,6 +306,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     graph_module.add_class::<PyCompiledGraph>()?;
     graph_module.add_class::<graph::PyGraphStream>()?;
     graph_module.add_class::<graph::PyAsyncGraphStream>()?;
+    graph_module.add_class::<graph::PyCommand>()?;
+    graph_module.add_class::<graph::PyDevServerHandle>()?;
     graph_module.add("END", graph::PY_END)?;
     m.add_submodule(&graph_module)?;
 
@@ -319,6 +321,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     llm_module.add_class::<PyTokenUsage>()?;
     llm_module.add_class::<PyLLM>()?;
     llm_module.add_class::<llm::PyLLMStream>()?;
+    llm_module.add_class::<llm::PyMockLLM>()?;
+    llm_module.add_class::<llm::PyChain>()?;
     llm_module.add_function(wrap_pyfunction!(llm::py_create_llm, &llm_module)?)?;
     llm_module.add_function(wrap_pyfunction!(py_estimate_tokens, &llm_module)?)?;
     llm_module.add_function(wrap_pyfunction!(py_model_pricing, &llm_module)?)?;

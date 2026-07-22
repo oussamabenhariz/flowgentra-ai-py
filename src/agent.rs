@@ -20,10 +20,15 @@ use crate::py_to_json;
 
 // ─── Internal enum for different agent backends ───────────────────────────────
 
-#[allow(clippy::large_enum_variant)]
+// `ConfigBased` is behind `Arc<tokio::sync::Mutex<..>>` (not a plain value) so
+// that `arun`/`arun_with_thread` can capture a 'static, Send future for
+// `future_into_py` without borrowing `&mut self` across an await point — the
+// same reason `PyCompiledGraph` wraps its inner `StateGraph` in an `Arc`.
+// `GraphBasedAgent::execute_input` only needs `&self`, so an `Arc` alone
+// (no Mutex) is enough for `GraphBased`.
 enum PyAgentInner {
-    ConfigBased(Agent),
-    GraphBased(GraphBasedAgent),
+    ConfigBased(Arc<tokio::sync::Mutex<Agent>>),
+    GraphBased(Arc<GraphBasedAgent>),
 }
 
 // ─── Python handler wrapping ─────────────────────────────────────────────────
@@ -182,7 +187,7 @@ impl PyAgent {
         let graph_based = GraphBasedAgent::new(prebuilt, None).map_err(to_py_err)?;
 
         Ok(PyAgent {
-            inner: PyAgentInner::GraphBased(graph_based),
+            inner: PyAgentInner::GraphBased(Arc::new(graph_based)),
         })
     }
 
@@ -335,7 +340,7 @@ impl PyAgent {
             from_config_path_with_extra_handlers(config_path, extra_handlers).map_err(to_py_err)?;
 
         Ok(PyAgent {
-            inner: PyAgentInner::ConfigBased(agent),
+            inner: PyAgentInner::ConfigBased(Arc::new(tokio::sync::Mutex::new(agent))),
         })
     }
 
@@ -344,7 +349,8 @@ impl PyAgent {
     fn state(&self, py: Python<'_>) -> PyResult<PyObject> {
         match &self.inner {
             PyAgentInner::ConfigBased(agent) => {
-                dynstate_to_pydict(py, &agent.state).map(|d| d.into())
+                let guard = agent.blocking_lock();
+                dynstate_to_pydict(py, &guard.state).map(|d| d.into())
             }
             PyAgentInner::GraphBased(_) => Ok(pyo3::types::PyDict::new_bound(py).into()),
         }
@@ -355,7 +361,7 @@ impl PyAgent {
         let val = py_to_json(value)?;
         match &mut self.inner {
             PyAgentInner::ConfigBased(agent) => {
-                agent.state.set(key, val);
+                agent.blocking_lock().state.set(key, val);
             }
             PyAgentInner::GraphBased(_) => {} // state not applicable
         }
@@ -366,14 +372,38 @@ impl PyAgent {
     fn run(&mut self, py: Python<'_>) -> PyResult<PyObject> {
         match &mut self.inner {
             PyAgentInner::ConfigBased(agent) => {
-                let fut = agent.run();
                 let result = py
-                    .allow_threads(|| crate::run_async(fut))
+                    .allow_threads(|| crate::run_async(async { agent.lock().await.run().await }))
                     .map_err(to_py_err)?;
                 dynstate_to_pydict(py, &result).map(|d| d.into())
             }
             PyAgentInner::GraphBased(_) => Err(ValidationError::new_err(
                 "Use run_with_input(input) for agents created via Agent.create()",
+            )),
+        }
+    }
+
+    /// Async variant of run() — returns a native awaitable driven by the
+    /// tokio runtime and bridged to the running asyncio loop (same mechanism
+    /// as `StateGraph.ainvoke`): no worker-thread bounce, no per-call
+    /// `block_on`. Only for config-based agents (`Agent.from_config_path()`);
+    /// use `arun_with_input` for agents created via `Agent.create()`.
+    ///
+    /// Wrapped by `async def arun()` in `flowgentra_ai.agent` — like
+    /// `StateGraph._ainvoke_native`, `future_into_py` needs a running loop at
+    /// CALL time, so the native future must be created from inside `await`,
+    /// not eagerly when the coroutine object is built (e.g. by `asyncio.run`).
+    fn _arun_native<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match &self.inner {
+            PyAgentInner::ConfigBased(agent) => {
+                let agent = Arc::clone(agent);
+                pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                    let result = agent.lock().await.run().await.map_err(to_py_err)?;
+                    Python::with_gil(|py| Ok(dynstate_to_pydict(py, &result)?.unbind().into_any()))
+                })
+            }
+            PyAgentInner::GraphBased(_) => Err(ValidationError::new_err(
+                "Use arun_with_input(input) for agents created via Agent.create()",
             )),
         }
     }
@@ -396,13 +426,41 @@ impl PyAgent {
         }
     }
 
+    /// Async variant of run_with_input() — see `_arun_native` for the mechanism
+    /// and why this is wrapped by `async def arun_with_input()` in Python.
+    /// Only for agents created via `Agent.create()`.
+    fn _arun_with_input_native<'py>(
+        &self,
+        py: Python<'py>,
+        input: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        match &self.inner {
+            PyAgentInner::ConfigBased(_) => Err(ValidationError::new_err(
+                "Use arun() for config-based agents created via Agent.from_config_path()",
+            )),
+            PyAgentInner::GraphBased(agent) => {
+                let agent = Arc::clone(agent);
+                pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                    let result = agent.execute_input(&input).await.map_err(to_py_err)?;
+                    Python::with_gil(|py| {
+                        let dict = pyo3::types::PyDict::new_bound(py);
+                        dict.set_item("result", result)?;
+                        Ok(dict.unbind().into_any())
+                    })
+                })
+            }
+        }
+    }
+
     /// Run the agent with a thread ID (for checkpointing) and return the final state dict.
     fn run_with_thread(&mut self, py: Python<'_>, thread_id: &str) -> PyResult<PyObject> {
         match &mut self.inner {
             PyAgentInner::ConfigBased(agent) => {
-                let fut = agent.run_with_thread(thread_id);
+                let tid = thread_id.to_string();
                 let result = py
-                    .allow_threads(|| crate::run_async(fut))
+                    .allow_threads(|| {
+                        crate::run_async(async { agent.lock().await.run_with_thread(&tid).await })
+                    })
                     .map_err(to_py_err)?;
                 dynstate_to_pydict(py, &result).map(|d| d.into())
             }
@@ -412,12 +470,38 @@ impl PyAgent {
         }
     }
 
+    /// Async variant of run_with_thread() — see `_arun_native` for the
+    /// mechanism and why this is wrapped by `async def arun_with_thread()`.
+    fn _arun_with_thread_native<'py>(
+        &self,
+        py: Python<'py>,
+        thread_id: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        match &self.inner {
+            PyAgentInner::ConfigBased(agent) => {
+                let agent = Arc::clone(agent);
+                pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                    let result = agent
+                        .lock()
+                        .await
+                        .run_with_thread(&thread_id)
+                        .await
+                        .map_err(to_py_err)?;
+                    Python::with_gil(|py| Ok(dynstate_to_pydict(py, &result)?.unbind().into_any()))
+                })
+            }
+            PyAgentInner::GraphBased(_) => Err(ValidationError::new_err(
+                "arun_with_thread is not supported for agents created via Agent.create()",
+            )),
+        }
+    }
+
     /// Get the agent's configuration.
     #[getter]
     fn config(&self) -> PyResult<PyAgentConfig> {
         match &self.inner {
             PyAgentInner::ConfigBased(agent) => Ok(PyAgentConfig {
-                inner: agent.config().clone(),
+                inner: agent.blocking_lock().config().clone(),
             }),
             PyAgentInner::GraphBased(_) => Err(pyo3::exceptions::PyAttributeError::new_err(
                 "config not available for agents created via Agent.create()",
@@ -429,7 +513,7 @@ impl PyAgent {
     #[getter]
     fn name(&self) -> String {
         match &self.inner {
-            PyAgentInner::ConfigBased(agent) => agent.config().name.clone(),
+            PyAgentInner::ConfigBased(agent) => agent.blocking_lock().config().name.clone(),
             PyAgentInner::GraphBased(agent) => {
                 use flowgentra_ai::core::agents::Agent as AgentTrait;
                 agent.name().to_string()

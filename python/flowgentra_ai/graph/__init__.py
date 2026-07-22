@@ -29,6 +29,7 @@ from flowgentra_ai._native import NodeInterrupt
 # Re-export compiled types directly.
 CompiledGraph = _g.CompiledGraph
 GraphStream = _g.GraphStream
+Command = _g.Command
 END = _g.END
 MessageGraph = _n.MessageGraph
 MessageGraphBuilder = _n.MessageGraphBuilder
@@ -94,6 +95,7 @@ __all__ = [
     "StateGraph",
     "CompiledGraph",
     "GraphStream",
+    "Command",
     "NodeInterrupt",
     "MessageGraph",
     "MessageGraphBuilder",

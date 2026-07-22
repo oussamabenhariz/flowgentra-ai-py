@@ -3,11 +3,12 @@ per-key parallel merge, OTel export."""
 
 import json
 import operator
+import os
 from typing import Annotated, List, TypedDict
 
 import pytest
 
-from flowgentra_ai.graph import StateGraph, END, NodeInterrupt
+from flowgentra_ai.graph import StateGraph, END, NodeInterrupt, Command
 from flowgentra_ai.exceptions import WorkflowTimeoutError
 
 
@@ -65,6 +66,49 @@ def test_sqlite_thread_survives_new_graph_instance(tmp_path):
     # New compiled graph, same database — state must still be there.
     g2 = make_sqlite_graph(db, interrupt_before="publish")
     result = g2.resume("t1")
+    assert result["log"] == ["draft", "publish"]
+
+
+# ── Postgres checkpointer ─────────────────────────────────────────────────────
+# Requires a reachable Postgres instance; set FLOWGENTRA_TEST_POSTGRES_URL to
+# run these (CI sets it explicitly). Skipped locally otherwise, same as the
+# Rust-side PostgresCheckpointer tests.
+
+POSTGRES_URL = os.environ.get("FLOWGENTRA_TEST_POSTGRES_URL")
+
+
+def make_postgres_graph(url, interrupt_before=None):
+    b = StateGraph(PubState)
+    b.add_node("draft", draft)
+    b.add_node("publish", publish)
+    b.set_entry_point("draft")
+    b.add_edge("draft", "publish")
+    b.add_edge("publish", END)
+    if interrupt_before:
+        b.interrupt_before(interrupt_before)
+    b.set_postgres_checkpointer(url)
+    return b.compile()
+
+
+@pytest.mark.skipif(not POSTGRES_URL, reason="FLOWGENTRA_TEST_POSTGRES_URL not set")
+def test_postgres_checkpointer_persists():
+    import uuid
+
+    thread = str(uuid.uuid4())
+    g = make_postgres_graph(POSTGRES_URL)
+    result = g.invoke_with_thread(thread, {"topic": "AI", "log": []})
+    assert result["log"] == ["draft", "publish"]
+
+
+@pytest.mark.skipif(not POSTGRES_URL, reason="FLOWGENTRA_TEST_POSTGRES_URL not set")
+def test_postgres_interrupt_resume():
+    import uuid
+
+    thread = str(uuid.uuid4())
+    g = make_postgres_graph(POSTGRES_URL, interrupt_before="publish")
+    with pytest.raises(Exception, match="breakpoint"):
+        g.invoke_with_thread(thread, {"topic": "AI", "log": []})
+    result = g.resume(thread)
     assert result["log"] == ["draft", "publish"]
 
 
@@ -131,6 +175,90 @@ def test_node_interrupt_inherits_base_exception():
 
     assert issubclass(NI, FlowgentraAIError)
     assert NI is NodeInterrupt
+
+
+# ── Command (unified resume: update + goto) ──────────────────────────────────
+
+def test_command_update_is_equivalent_to_resume_with_state(tmp_path):
+    def gate(s):
+        if not s["approval"]:
+            raise NodeInterrupt({"question": "approve?", "doc": s["doc"]})
+        return {**s, "log": s["log"] + [f"gate:{s['approval']}"]}
+
+    b = StateGraph(ApprovalState)
+    b.add_node("gate", gate)
+    b.set_entry_point("gate")
+    b.add_edge("gate", END)
+    b.set_checkpointer(str(tmp_path))
+    g = b.compile()
+
+    with pytest.raises(NodeInterrupt):
+        g.invoke_with_thread("t1", {"doc": "draft-1", "approval": "", "log": []})
+
+    result = g.resume_command("t1", Command(update={"approval": "yes"}))
+    assert result["log"] == ["gate:yes"]
+
+
+def test_command_update_rejects_unknown_schema_key(tmp_path):
+    def gate(s):
+        if not s["approval"]:
+            raise NodeInterrupt({"question": "approve?"})
+        return {**s, "log": s["log"] + [f"gate:{s['approval']}"]}
+
+    b = StateGraph(ApprovalState)
+    b.add_node("gate", gate)
+    b.set_entry_point("gate")
+    b.add_edge("gate", END)
+    b.set_checkpointer(str(tmp_path))
+    g = b.compile()
+
+    with pytest.raises(NodeInterrupt):
+        g.invoke_with_thread("t1", {"doc": "draft-1", "approval": "", "log": []})
+
+    with pytest.raises(KeyError, match="not declared in the state schema"):
+        g.resume_command("t1", Command(update={"nope": 1}))
+
+
+def test_command_goto_skips_checkpointed_successor(tmp_path):
+    def cleanup(s):
+        return {**s, "log": s["log"] + ["cleanup"]}
+
+    b = StateGraph(PubState)
+    b.add_node("draft", draft)
+    b.add_node("publish", publish)
+    b.add_node("cleanup", cleanup)
+    b.set_entry_point("draft")
+    b.add_edge("draft", "publish")
+    b.add_edge("publish", END)
+    b.add_edge("cleanup", END)
+    b.interrupt_after("draft")
+    b.set_checkpointer(str(tmp_path))
+    g = b.compile()
+
+    with pytest.raises(Exception, match="breakpoint"):
+        g.invoke_with_thread("t1", {"topic": "AI", "log": []})
+
+    # goto="cleanup" skips "publish" entirely, unlike a plain resume().
+    result = g.resume_command("t1", Command(goto="cleanup"))
+    assert result["log"] == ["draft", "cleanup"]
+
+
+def test_command_goto_rejects_unknown_node(tmp_path):
+    b = StateGraph(PubState)
+    b.add_node("draft", draft)
+    b.add_node("publish", publish)
+    b.set_entry_point("draft")
+    b.add_edge("draft", "publish")
+    b.add_edge("publish", END)
+    b.interrupt_after("draft")
+    b.set_checkpointer(str(tmp_path))
+    g = b.compile()
+
+    with pytest.raises(Exception, match="breakpoint"):
+        g.invoke_with_thread("t1", {"topic": "AI", "log": []})
+
+    with pytest.raises(Exception, match="not found|NodeNotFound"):
+        g.resume_command("t1", Command(goto="does_not_exist"))
 
 
 # ── Per-key reducers in parallel supersteps ──────────────────────────────────

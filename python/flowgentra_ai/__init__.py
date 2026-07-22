@@ -85,7 +85,7 @@ from flowgentra_ai.exceptions import (
     NodeInterrupt,
 )
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 __all__ = [
     # Core graph
