@@ -69,8 +69,3 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 
-# TEMPORARY (dev-only): build py bindings against unreleased flowgentra-ai core
-# changes from the local checkout. Remove before publishing (bump the dep to the
-# next published version instead).
-[patch.crates-io]
-flowgentra-ai = { path = "../flowgentra-ai-rs/flowgentra-ai" }
