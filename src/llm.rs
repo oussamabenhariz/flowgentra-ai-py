@@ -5,12 +5,38 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use flowgentra_ai::core::llm::{
-    create_llm, model_pricing, set_model_price, CachedLLM, Chain, FallbackLLM, LLMConfig,
-    LLMProvider, Message, MessageRole, MockLLM, ResponseFormat, RetryLLM, TokenUsage, ToolCall,
-    ToolDefinition, LLM,
+    create_llm, model_pricing, set_model_price, CachedLLM, Chain, FallbackLLM, ImageContent,
+    LLMConfig, LLMProvider, Message, MessageRole, MockLLM, ResponseFormat, RetryLLM, TokenUsage,
+    ToolCall, ToolDefinition, LLM,
 };
 
 use crate::prompt_parser::PyPromptTemplate;
+
+/// Parse a Python image item — a URL/data-URI string, or a `{"url", "detail"}`
+/// dict — into an `ImageContent`.
+fn parse_image_content(item: &Bound<'_, PyAny>) -> PyResult<ImageContent> {
+    if let Ok(url) = item.extract::<String>() {
+        return Ok(ImageContent::url(url));
+    }
+    if let Ok(dict) = item.downcast::<pyo3::types::PyDict>() {
+        let url: String = dict
+            .get_item("url")?
+            .ok_or_else(|| {
+                pyo3::exceptions::PyValueError::new_err("image dict must have a 'url' key")
+            })?
+            .extract()?;
+        let mut img = ImageContent::url(url);
+        if let Some(detail) = dict.get_item("detail")? {
+            if !detail.is_none() {
+                img = img.with_detail(detail.extract::<String>()?);
+            }
+        }
+        return Ok(img);
+    }
+    Err(pyo3::exceptions::PyTypeError::new_err(
+        "each image must be a URL/data-URI string or a {'url', 'detail'} dict",
+    ))
+}
 
 use crate::error::to_py_err;
 use crate::{json_to_py, py_to_json};
@@ -139,11 +165,25 @@ pub struct PyMessage {
 
 #[pymethods]
 impl PyMessage {
+    /// Create a user message, optionally with attached images (vision).
+    ///
+    /// `images` is a list where each item is either an image URL / `data:` URI
+    /// string, or a dict `{"url": ..., "detail": "high"}`.
+    ///
+    /// Example:
+    ///     Message.user("What's in this photo?", images=["https://ex.com/cat.jpg"])
+    ///     Message.user("Describe", images=[{"url": data_uri, "detail": "high"}])
     #[staticmethod]
-    fn user(content: String) -> Self {
-        PyMessage {
-            inner: Message::user(content),
+    #[pyo3(signature = (content, images=None))]
+    fn user(content: String, images: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let mut msg = Message::user(content);
+        if let Some(images) = images {
+            for item in images.iter()? {
+                let item = item?;
+                msg.images.push(parse_image_content(&item)?);
+            }
         }
+        Ok(PyMessage { inner: msg })
     }
     #[staticmethod]
     fn system(content: String) -> Self {
@@ -200,6 +240,30 @@ impl PyMessage {
     #[getter]
     fn get_tool_call_id(&self) -> Option<String> {
         self.inner.tool_call_id.clone()
+    }
+    /// Attached images as a list of `{"url", "detail"}` dicts (empty if none).
+    #[getter]
+    fn get_images(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let list = pyo3::types::PyList::empty_bound(py);
+        for img in &self.inner.images {
+            let d = pyo3::types::PyDict::new_bound(py);
+            d.set_item("url", &img.url)?;
+            d.set_item("detail", img.detail.clone())?;
+            list.append(d)?;
+        }
+        Ok(list.into())
+    }
+
+    /// Return a copy of this message with an image attached (builder form).
+    #[pyo3(signature = (url, detail=None))]
+    fn with_image(&self, url: String, detail: Option<String>) -> Self {
+        let mut img = ImageContent::url(url);
+        if let Some(d) = detail {
+            img = img.with_detail(d);
+        }
+        PyMessage {
+            inner: self.inner.clone().with_image(img),
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -412,6 +476,40 @@ impl PyMockLLM {
     /// Reply with `reply` when the latest user message contains `needle`.
     fn when_contains(&mut self, needle: String, reply: String) {
         self.inner = std::mem::take(&mut self.inner).when_contains(needle, reply);
+    }
+
+    /// Reply based on a Python predicate over the full message history.
+    ///
+    /// `predicate(messages)` receives a list of `{"role", "content"}` dicts and
+    /// returns the reply string to use, or `None` to fall through to the next
+    /// matcher. Mirrors the Rust `MockLLM::when` closure form.
+    ///
+    /// Example:
+    ///     mock = MockLLM()
+    ///     mock.when(lambda msgs: "escalate" if len(msgs) > 3 else None)
+    ///     mock.otherwise("ok")
+    fn when(&mut self, predicate: PyObject) {
+        self.inner = std::mem::take(&mut self.inner).when(move |msgs| {
+            Python::with_gil(|py| {
+                let list = pyo3::types::PyList::empty_bound(py);
+                for m in msgs {
+                    let d = pyo3::types::PyDict::new_bound(py);
+                    let role = match m.role {
+                        MessageRole::System => "system",
+                        MessageRole::User => "user",
+                        MessageRole::Assistant => "assistant",
+                        MessageRole::Tool => "tool",
+                    };
+                    let _ = d.set_item("role", role);
+                    let _ = d.set_item("content", &m.content);
+                    let _ = list.append(d);
+                }
+                match predicate.call1(py, (list,)) {
+                    Ok(res) if !res.is_none(py) => res.extract::<String>(py).ok(),
+                    _ => None,
+                }
+            })
+        });
     }
 
     /// Fallback reply when no matcher fires.
@@ -676,6 +774,24 @@ impl PyLLM {
     fn chat_structured(&self, messages: Vec<PyMessage>) -> PyResult<PyObject> {
         let msgs: Vec<Message> = messages.into_iter().map(|m| m.inner).collect();
         let val = crate::run_async(self.inner.chat_structured(msgs)).map_err(to_py_err)?;
+        Python::with_gil(|py| crate::json_to_py(py, &val))
+    }
+
+    /// Structured output constrained to an explicit JSON Schema.
+    ///
+    /// Appends the schema to the prompt and parses the reply as JSON (tolerant
+    /// of markdown fences). Usually reached via the higher-level
+    /// `llm.with_structured_output(schema_or_model)` wrapper rather than
+    /// directly.
+    fn chat_structured_with_schema(
+        &self,
+        messages: Vec<PyMessage>,
+        schema: &Bound<'_, PyAny>,
+    ) -> PyResult<PyObject> {
+        let msgs: Vec<Message> = messages.into_iter().map(|m| m.inner).collect();
+        let schema_json = py_to_json(schema)?;
+        let val = crate::run_async(self.inner.chat_structured_with_schema(msgs, schema_json))
+            .map_err(to_py_err)?;
         Python::with_gil(|py| crate::json_to_py(py, &val))
     }
 

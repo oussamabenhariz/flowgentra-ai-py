@@ -496,6 +496,27 @@ impl PyAgent {
         }
     }
 
+    /// Subscribe to real-time execution events (node start/complete, edge
+    /// traversal, LLM streaming chunks, tool calls). Subscribe BEFORE calling
+    /// run(); drain the receiver from another thread for live streaming, or
+    /// after run() completes to inspect what happened. Config-based agents only.
+    ///
+    /// Example:
+    ///     rx = agent.subscribe_events()
+    ///     agent.set_state("input", "hi")
+    ///     agent.run()
+    ///     for event in rx.drain():
+    ///         print(event["type"])
+    fn subscribe_events(&self) -> Option<crate::observability::PyEventReceiver> {
+        match &self.inner {
+            PyAgentInner::ConfigBased(agent) => agent
+                .blocking_lock()
+                .subscribe()
+                .map(|rx| crate::observability::PyEventReceiver { inner: Some(rx) }),
+            PyAgentInner::GraphBased(_) => None,
+        }
+    }
+
     /// Get the agent's configuration.
     #[getter]
     fn config(&self) -> PyResult<PyAgentConfig> {

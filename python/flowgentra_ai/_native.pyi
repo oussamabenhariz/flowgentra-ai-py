@@ -65,6 +65,10 @@ class Agent:
     async def arun_with_thread(self, thread_id: str) -> State:
         """Async variant of run_with_thread()."""
         ...
+    def subscribe_events(self) -> Optional["EventReceiver"]:
+        """Subscribe to real-time execution events (node/edge/LLM). Subscribe
+        BEFORE run(); drain the receiver during or after. Config-based agents only."""
+        ...
     @property
     def config(self) -> "AgentConfig": ...
     @property
@@ -226,6 +230,18 @@ class StateGraphBuilder:
         created if missing.
         """
         ...
+    def set_mysql_checkpointer(self, url: str) -> None:
+        """Persist checkpoints in MySQL (e.g. "mysql://user:pass@host/db")."""
+        ...
+    def set_redis_checkpointer(self, url: str, ttl_secs: Optional[int] = None) -> None:
+        """Persist checkpoints in Redis (e.g. "redis://localhost:6379"). `ttl_secs`
+        expires each checkpoint after that many seconds."""
+        ...
+    def set_mongo_checkpointer(
+        self, url: str, db: str = "flowgentra", collection: str = "checkpoints"
+    ) -> None:
+        """Persist checkpoints in MongoDB."""
+        ...
     def add_cached_node(
         self,
         name: str,
@@ -274,6 +290,21 @@ class DevServerHandle:
     @property
     def url(self) -> str: ...
     def shutdown(self) -> None: ...
+    def __repr__(self) -> str: ...
+
+class NodeContext:
+    """Passed as the second argument to Python node functions that declare one
+    (`def node(state, ctx): ...`). One-parameter nodes never receive this."""
+
+    @property
+    def resume_value(self) -> Any:
+        """The value handed to this node by `Command(resume=value)` on resume,
+        or None on a normal run."""
+        ...
+    @property
+    def node_name(self) -> str:
+        """The name of the node currently executing."""
+        ...
     def __repr__(self) -> str: ...
 
 class GraphStream:
@@ -377,7 +408,20 @@ class Message:
     @staticmethod
     def system(content: str) -> "Message": ...
     @staticmethod
-    def user(content: str) -> "Message": ...
+    def user(
+        content: str,
+        images: Optional[List[Union[str, Dict[str, Any]]]] = None,
+    ) -> "Message":
+        """A user message, optionally with attached images (vision). Each image
+        is a URL/data-URI string or a `{"url", "detail"}` dict."""
+        ...
+    def with_image(self, url: str, detail: Optional[str] = None) -> "Message":
+        """Return a copy of this message with an image attached."""
+        ...
+    @property
+    def images(self) -> List[Dict[str, Any]]:
+        """Attached images as `{"url", "detail"}` dicts (empty if none)."""
+        ...
     @staticmethod
     def assistant(content: str) -> "Message": ...
     @staticmethod
@@ -555,6 +599,15 @@ class LLM:
     def chat_structured(self, messages: List[Message]) -> Any:
         """Send messages and parse the response as JSON."""
         ...
+    def chat_structured_with_schema(self, messages: List[Message], schema: Any) -> Any:
+        """Structured output constrained to an explicit JSON Schema. Usually
+        reached via the higher-level `with_structured_output`."""
+        ...
+    def with_structured_output(self, target: Any) -> Any:
+        """Return a wrapper whose `.invoke(messages)` yields output matching
+        `target` — a JSON Schema dict, a Pydantic model class (returns a model
+        instance), or a TypedDict. Mirrors LangChain's `with_structured_output`."""
+        ...
     def chat_with_usage(self, messages: List[Message]) -> tuple: ...
     def chat_with_tools(
         self, messages: List[Message], tools: List[ToolDefinition]
@@ -605,6 +658,11 @@ class MockLLM:
         ...
     def when_contains(self, needle: str, reply: str) -> None:
         """Reply with `reply` when the latest user message contains `needle`."""
+        ...
+    def when(self, predicate: Callable[[List[Dict[str, Any]]], Optional[str]]) -> None:
+        """Reply based on a predicate over the message history. `predicate`
+        receives a list of `{"role", "content"}` dicts and returns the reply, or
+        None to fall through to the next matcher."""
         ...
     def otherwise(self, reply: str) -> None:
         """Fallback reply when no matcher fires."""

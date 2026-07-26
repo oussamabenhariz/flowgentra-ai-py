@@ -4,6 +4,81 @@ All notable changes to the `flowgentra-ai` Python package. Format follows
 [Keep a Changelog](https://keepachangelog.com/); versioning follows SemVer
 (0.x: minor bumps may break).
 
+## [0.3.4] - Unreleased
+
+Tracks `flowgentra-ai` 0.3.4. Capability + DX batch aimed at LangGraph/LangChain
+parity. No breaking changes.
+
+### Added
+- **Multimodal (vision) messages** — `Message.user(content, images=[...])` where
+  each image is a URL / `data:` URI string or a `{"url", "detail"}` dict; plus
+  `message.with_image(url, detail=None)` and a `message.images` accessor.
+  Serialized for OpenAI/Anthropic automatically.
+- **Typed structured output** — `llm.with_structured_output(target)` returns a
+  wrapper whose `.invoke(messages)` yields output conforming to `target`, which
+  may be a JSON Schema dict, a Pydantic model class (returns a validated
+  instance), or a TypedDict. Mirrors LangChain.
+- **Node context argument** — a node function may declare a second parameter
+  (`def node(state, ctx)`) to receive a `NodeContext` exposing `resume_value`
+  (so `Command(resume=)` reaches Python nodes) and `node_name`. Single-argument
+  `(state)` nodes are unchanged.
+- **More graph checkpointers** — `builder.set_mysql_checkpointer(url)`,
+  `set_redis_checkpointer(url, ttl_secs=None)`, and
+  `set_mongo_checkpointer(url, db, collection)`, joining file/SQLite/Postgres.
+- **`MockLLM.when(predicate)`** — a Python predicate over the message history
+  (previously Rust-only).
+- **`agent.subscribe_events()`** — stream node/edge/LLM execution events from a
+  config-driven agent (subscribe before `run()`, drain during/after).
+- **`flowgentra_ai.langgraph_compat`** — a compatibility shim (StateGraph with a
+  `START` sentinel, `compile(checkpointer=...)`, `invoke(state, config=...)`,
+  `MemorySaver`, `interrupt`) so most LangGraph code runs by changing the import
+  line. See the "Migrating from LangGraph" guide.
+
+## [0.3.3] - 2026-07-22
+
+Tracks `flowgentra-ai` 0.3.3. Human-in-the-loop, checkpointing, and subgraphs
+reach parity with LangGraph's core primitives, plus ergonomics features aimed
+at closing the day-to-day UX gap. No breaking changes.
+
+### Added
+- **`Command` + `CompiledGraph.resume_command()`** (from `flowgentra_ai.graph`)
+  — unifies resume with `update=` (schema-validated state update) and
+  `goto=` (resume at an arbitrary node). Mirrors LangGraph's
+  `Command(resume=, update=, goto=)`. Note: `resume=` only reaches
+  Rust-authored nodes; Python node functions receive `state: dict` with no
+  context, so hand answers to Python nodes via `update=`.
+- **`StateGraphBuilder.set_postgres_checkpointer(url)`** — Postgres-backed
+  graph checkpointing for multi-process/replica deployments, joining
+  `set_checkpointer` (file) and `set_sqlite_checkpointer`.
+- **`@tool` schema inference** — the decorator now infers a full JSON Schema
+  from the function's type hints (`Optional[T]`/defaulted params → not
+  required) and its Google-style docstring `Args:` block (per-parameter
+  descriptions). `parameters=` may still be passed explicitly. New
+  `ToolRegistry.to_tool_definitions()` returns built-in + custom tools as a
+  `ToolDefinition` list ready for `LLM.chat_with_tools()`; `.get()` now
+  includes the parameter schema.
+- **`MockLLM`** (`flowgentra_ai.llm`) — a scripted, offline LLM for tests
+  (`.always()` / `.sequence()` / `.when_contains()` / `.otherwise()`), no
+  network or credentials. `.as_llm()` returns a drop-in `LLM`.
+- **Async `Agent`** — `arun()`, `arun_with_input()`, and `arun_with_thread()`
+  are native awaitables driven by the tokio runtime (same mechanism as
+  `CompiledGraph.ainvoke`), no worker-thread bounce.
+- **`CompiledGraph.serve_dev(port)`** — a local dev viewer showing the graph's
+  nodes and a live execution-event feed in the browser; returns a
+  `DevServerHandle` (`.url` / `.shutdown()`).
+- **Chain composition** — `flowgentra_ai.llm.Chain(prompt, llm)` for the
+  fixed two-stage prompt → LLM case, and `flowgentra_ai.chain` for LCEL-style
+  composition: `prompt | llm | parser | fn` via the `|` operator, or the
+  explicit `Chain.sequence([...])`. `PromptTemplate`, `JsonOutputParser`, and
+  `ListOutputParser` are now re-exported from `flowgentra_ai.llm` (previously
+  reachable only via the internal `_native.text`).
+
+### Fixed
+- `builder.add_subgraph(...)` is now covered by an end-to-end test asserting
+  the subgraph's result merges into the parent state exactly once (the
+  underlying Rust no-op bug affected only pure-Rust graphs; the Python path
+  was already correct).
+
 ## [0.3.2] - 2026-07-19
 
 ### Fixed

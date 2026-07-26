@@ -84,6 +84,18 @@ def test_arun_with_thread_checkpoints_per_thread(config_path):
     assert result["trail"] == ["a", "b"]
 
 
+def test_subscribe_events_captures_execution(config_path):
+    """agent.subscribe_events() streams node/edge/graph events from the run."""
+    agent = Agent.from_config_path(config_path, allow_python_handlers=True)
+    rx = agent.subscribe_events()
+    assert rx is not None
+    agent.set_state("input", "hi")
+    agent.run()
+    types = [e["type"] for e in rx.drain()]
+    assert "node_started" in types
+    assert "node_completed" in types
+
+
 def test_arun_runs_concurrently_not_serially(config_path):
     """Two independent agents' arun() calls should overlap in wall-clock time
     (same guarantee StateGraph.ainvoke's parallel-supervisor test proves) —

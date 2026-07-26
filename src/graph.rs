@@ -322,6 +322,70 @@ struct PyFunctionNode {
     schema_set: Arc<HashSet<String>>,
     /// Per-field reducer strategies extracted from the state class schema.
     channel_schemas: Arc<HashMap<String, ChannelType>>,
+    /// Whether the callable accepts a second positional argument (the node
+    /// context). Detected once at construction so `execute` doesn't re-inspect.
+    wants_ctx: bool,
+}
+
+/// Per-node execution context passed to Python node functions that declare a
+/// second parameter (`def node(state, ctx): ...`). Mirrors what a Rust node
+/// gets from `Context`. Node functions with a single parameter never see this
+/// — the one-arg `(state)` signature stays fully supported.
+#[pyclass(name = "NodeContext")]
+pub struct PyNodeContext {
+    node_name: String,
+    resume_value: Option<serde_json::Value>,
+}
+
+#[pymethods]
+impl PyNodeContext {
+    /// The value handed to this node by `Command(resume=value)` on resume,
+    /// or `None` on a normal run. Lets a paused Python node read the human's
+    /// answer without the caller having to know which state field to overwrite.
+    #[getter]
+    fn resume_value(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.resume_value {
+            Some(v) => crate::json_to_py(py, v),
+            None => Ok(py.None()),
+        }
+    }
+
+    /// The name of the node currently executing.
+    #[getter]
+    fn node_name(&self) -> String {
+        self.node_name.clone()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("NodeContext(node_name='{}')", self.node_name)
+    }
+}
+
+/// Return true if `func` accepts a second positional argument (the node
+/// context). A single-arg `(state)` callable returns false and keeps the
+/// classic one-argument calling convention. Detection is best-effort: a
+/// callable whose signature can't be introspected (some builtins) is treated
+/// as one-arg.
+fn callable_wants_ctx(py: Python<'_>, func: &PyObject) -> bool {
+    let inspect = match py.import_bound("inspect") {
+        Ok(m) => m,
+        Err(_) => return false,
+    };
+    let sig = match inspect.call_method1("signature", (func,)) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let params = match sig.getattr("parameters") {
+        Ok(p) => p,
+        Err(_) => return false,
+    };
+    // `(state, ctx)` and `(state, *args)` both yield >= 2 signature parameters
+    // (VAR_POSITIONAL counts as one). `(state)` yields 1.
+    params
+        .call_method0("__len__")
+        .and_then(|l| l.extract::<usize>())
+        .map(|n| n >= 2)
+        .unwrap_or(false)
 }
 
 #[async_trait::async_trait]
@@ -329,12 +393,17 @@ impl Node<DynState> for PyFunctionNode {
     async fn execute(
         &self,
         state: &DynState,
-        _ctx: &Context,
+        ctx: &Context,
     ) -> Result<DynStateUpdate, StateGraphError> {
         let state_clone = state.clone();
         let schema_set = self.schema_set.clone();
         let channel_schemas = self.channel_schemas.clone();
         let node_name = self.name.clone();
+        let wants_ctx = self.wants_ctx;
+        // Extract owned copies of the context bits the Python node may read,
+        // before entering spawn_blocking (Context borrows are not 'static).
+        let ctx_resume_value = ctx.resume_value().cloned();
+        let ctx_node_name = ctx.node_name().to_string();
         // Clone the PyObject before entering spawn_blocking (requires GIL token).
         let func = Python::with_gil(|py| self.func.clone_ref(py));
 
@@ -347,8 +416,21 @@ impl Node<DynState> for PyFunctionNode {
                     // Pass full state as a plain dict
                     let state_dict = dynstate_to_pydict(py, &state_clone)?;
 
-                    // Call Python function
-                    let py_result = func.call1(py, (state_dict,))?;
+                    // Call Python function. Two-arg node functions additionally
+                    // receive a NodeContext (resume value, node name); one-arg
+                    // functions keep the classic `(state)` convention.
+                    let py_result = if wants_ctx {
+                        let ctx_obj = Py::new(
+                            py,
+                            PyNodeContext {
+                                node_name: ctx_node_name.clone(),
+                                resume_value: ctx_resume_value.clone(),
+                            },
+                        )?;
+                        func.call1(py, (state_dict, ctx_obj))?
+                    } else {
+                        func.call1(py, (state_dict,))?
+                    };
 
                     // Expect a plain dict back (partial update)
                     let py_result_bound = py_result.bind(py);
@@ -511,6 +593,10 @@ pub struct PyStateGraphBuilder {
     checkpointer_path: Option<String>,
     checkpointer_sqlite_url: Option<String>,
     checkpointer_postgres_url: Option<String>,
+    checkpointer_mysql_url: Option<String>,
+    checkpointer_redis_url: Option<String>,
+    checkpointer_redis_ttl: Option<u64>,
+    checkpointer_mongo: Option<(String, String, String)>,
     middleware: Vec<Arc<dyn Middleware<DynState>>>,
     broadcaster: Option<Arc<EventBroadcaster>>,
 }
@@ -558,6 +644,10 @@ impl PyStateGraphBuilder {
             checkpointer_path: None,
             checkpointer_sqlite_url: None,
             checkpointer_postgres_url: None,
+            checkpointer_mysql_url: None,
+            checkpointer_redis_url: None,
+            checkpointer_redis_ttl: None,
+            checkpointer_mongo: None,
             middleware: Vec::new(),
             broadcaster: None,
         })
@@ -571,12 +661,14 @@ impl PyStateGraphBuilder {
     ///
     /// Unknown keys in the return value raise a KeyError at runtime.
     fn add_node(&mut self, name: &str, func: PyObject) {
+        let wants_ctx = Python::with_gil(|py| callable_wants_ctx(py, &func));
         let node = Arc::new(PyFunctionNode {
             name: name.to_string(),
             func,
             schema_fields: self.schema_fields.clone(),
             schema_set: self.schema_set.clone(),
             channel_schemas: self.channel_schemas.clone(),
+            wants_ctx,
         }) as Arc<dyn Node<DynState>>;
         self.nodes.push((name.to_string(), node));
     }
@@ -601,12 +693,14 @@ impl PyStateGraphBuilder {
         max_entries: usize,
         ttl_secs: Option<f64>,
     ) {
+        let wants_ctx = Python::with_gil(|py| callable_wants_ctx(py, &func));
         let inner = Arc::new(PyFunctionNode {
             name: name.to_string(),
             func,
             schema_fields: self.schema_fields.clone(),
             schema_set: self.schema_set.clone(),
             channel_schemas: self.channel_schemas.clone(),
+            wants_ctx,
         }) as Arc<dyn Node<DynState>>;
         let cached = Arc::new(flowgentra_ai::core::state_graph::CachedNode::new(
             inner,
@@ -907,6 +1001,33 @@ impl PyStateGraphBuilder {
         Ok(())
     }
 
+    /// Persist checkpoints in a MySQL database (e.g. "mysql://user:pass@localhost/mydb").
+    /// Multi-process safe like Postgres. The checkpoint table is created if missing.
+    fn set_mysql_checkpointer(&mut self, url: &str) -> PyResult<()> {
+        self.checkpointer_mysql_url = Some(url.to_string());
+        Ok(())
+    }
+
+    /// Persist checkpoints in Redis (e.g. "redis://localhost:6379").
+    ///
+    /// `ttl_secs`, if given, expires each checkpoint after that many seconds —
+    /// handy for ephemeral sessions.
+    #[pyo3(signature = (url, ttl_secs=None))]
+    fn set_redis_checkpointer(&mut self, url: &str, ttl_secs: Option<u64>) -> PyResult<()> {
+        // Encode ttl in the stored value by appending; kept separate for clarity.
+        self.checkpointer_redis_url = Some(url.to_string());
+        self.checkpointer_redis_ttl = ttl_secs;
+        Ok(())
+    }
+
+    /// Persist checkpoints in MongoDB. `db` and `collection` name where the
+    /// checkpoints live (e.g. "mongodb://localhost:27017", "flowgentra", "checkpoints").
+    #[pyo3(signature = (url, db="flowgentra", collection="checkpoints"))]
+    fn set_mongo_checkpointer(&mut self, url: &str, db: &str, collection: &str) -> PyResult<()> {
+        self.checkpointer_mongo = Some((url.to_string(), db.to_string(), collection.to_string()));
+        Ok(())
+    }
+
     /// Attach an EventBroadcaster so the compiled graph emits execution events.
     ///
     /// Subscribe from the broadcaster before invoking the graph to receive
@@ -1064,7 +1185,41 @@ impl PyStateGraphBuilder {
             builder = builder.add_node(name.clone(), node);
         }
 
-        if let Some(ref url) = self.checkpointer_postgres_url {
+        if let Some((ref url, ref db, ref coll)) = self.checkpointer_mongo {
+            let cp = crate::run_async(
+                flowgentra_ai::core::state_graph::MongoCheckpointer::connect(url, db, coll),
+            )
+            .map_err(|e| {
+                crate::error::CheckpointError::new_err(format!(
+                    "Failed to open Mongo checkpointer at '{}': {}",
+                    url, e
+                ))
+            })?;
+            builder = builder.set_checkpointer(Arc::new(cp));
+        } else if let Some(ref url) = self.checkpointer_redis_url {
+            let ttl = self.checkpointer_redis_ttl;
+            let cp = crate::run_async(
+                flowgentra_ai::core::state_graph::RedisCheckpointer::connect(url, ttl),
+            )
+            .map_err(|e| {
+                crate::error::CheckpointError::new_err(format!(
+                    "Failed to open Redis checkpointer at '{}': {}",
+                    url, e
+                ))
+            })?;
+            builder = builder.set_checkpointer(Arc::new(cp));
+        } else if let Some(ref url) = self.checkpointer_mysql_url {
+            let cp = crate::run_async(
+                flowgentra_ai::core::state_graph::MysqlCheckpointer::connect(url),
+            )
+            .map_err(|e| {
+                crate::error::CheckpointError::new_err(format!(
+                    "Failed to open MySQL checkpointer at '{}': {}",
+                    url, e
+                ))
+            })?;
+            builder = builder.set_checkpointer(Arc::new(cp));
+        } else if let Some(ref url) = self.checkpointer_postgres_url {
             let cp = crate::run_async(
                 flowgentra_ai::core::state_graph::PostgresCheckpointer::connect(url),
             )

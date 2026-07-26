@@ -1,6 +1,6 @@
 [package]
 name = "flowgentra-ai-py"
-version = "0.3.3"
+version = "0.3.4"
 
 edition = "2021"
 authors = ["Oussama Ben Hariz"]
@@ -22,7 +22,7 @@ redis-store = []
 neo4j-store = []
 
 [dependencies]
-flowgentra-ai = { version = "0.3.3", features = [
+flowgentra-ai = { version = "0.3.4", features = [
     "sqlite", "postgres", "mysql", "mssql",
     "mongodb-store", "redis-store", "neo4j-store", "cassandra-store", "elasticsearch-store",
     "pgvector-store", "redis-vector", "elasticsearch-vector",
@@ -68,3 +68,9 @@ pyo3-async-runtimes = { version = "=0.22.0", features = ["tokio-runtime"] }
 lto = "fat"
 codegen-units = 1
 strip = "symbols"
+
+# TEMPORARY (dev-only): build py bindings against unreleased flowgentra-ai core
+# changes from the local checkout. Remove before publishing (bump the dep to the
+# next published version instead).
+[patch.crates-io]
+flowgentra-ai = { path = "../flowgentra-ai-rs/flowgentra-ai" }

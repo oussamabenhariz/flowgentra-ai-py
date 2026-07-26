@@ -30,6 +30,7 @@ from flowgentra_ai._native import NodeInterrupt
 CompiledGraph = _g.CompiledGraph
 GraphStream = _g.GraphStream
 Command = _g.Command
+DevServerHandle = _g.DevServerHandle
 END = _g.END
 MessageGraph = _n.MessageGraph
 MessageGraphBuilder = _n.MessageGraphBuilder
@@ -96,6 +97,7 @@ __all__ = [
     "CompiledGraph",
     "GraphStream",
     "Command",
+    "DevServerHandle",
     "NodeInterrupt",
     "MessageGraph",
     "MessageGraphBuilder",
